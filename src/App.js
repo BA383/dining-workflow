@@ -1,5 +1,8 @@
+<<<<<<< HEAD
 // DiningWorkflowApp.jsx - Full layout with sidebar navigation and routes
 
+=======
+>>>>>>> 9a5e3173011bf786ecabc5470b04dd507e123129
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import RegattasForm from './RegattasForm';
@@ -16,7 +19,11 @@ function GroupEntry() {
   return <div className="p-6">Group Entry Form (Coming Soon)</div>;
 }
 
+<<<<<<< HEAD
 function Tasks() {
+=======
+function MyTasks() {
+>>>>>>> 9a5e3173011bf786ecabc5470b04dd507e123129
   return (
     <div className="p-6">
       <h2 className="text-xl font-semibold mb-4">My Tasks</h2>
@@ -39,6 +46,7 @@ function Tasks() {
 
 function App() {
   return (
+<<<<<<< HEAD
     <Router>
       <div className="flex min-h-screen">
         {/* Sidebar */}
@@ -56,12 +64,39 @@ function App() {
 
         {/* Main Content */}
         <main className="flex-1 bg-gray-100">
+=======
+    return (
+      <div className="p-10">
+        <h1 className="text-4xl font-bold text-red-600">
+          Tailwind Test Heading
+        </h1>
+        <p className="text-gray-700 mt-4">If this is styled, Tailwind is working.</p>
+      </div>
+    );    
+
+        <aside className="w-64 bg-gray-800 text-white p-6 space-y-4">
+        <h1 className="text-4xl text-red-600 font-bold">If this is red and big, Tailwind is working</h1>
+
+          <nav className="flex flex-col gap-3">
+            <Link to="/" className="hover:underline">Home</Link>
+            <Link to="/deposits" className="hover:underline">Deposits</Link>
+            <Link to="/invoices" className="hover:underline">Invoices</Link>
+            <Link to="/groups" className="hover:underline">Group Entry</Link>
+            <Link to="/tasks" className="hover:underline">My Tasks</Link>
+          </nav>
+        </aside>
+        <main className="flex-1 bg-gray-100 p-6">
+>>>>>>> 9a5e3173011bf786ecabc5470b04dd507e123129
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/deposits" element={<RegattasForm />} />
             <Route path="/invoices" element={<Invoices />} />
             <Route path="/groups" element={<GroupEntry />} />
+<<<<<<< HEAD
             <Route path="/tasks" element={<Tasks />} />
+=======
+            <Route path="/tasks" element={<MyTasks />} />
+>>>>>>> 9a5e3173011bf786ecabc5470b04dd507e123129
           </Routes>
         </main>
       </div>
