@@ -13,9 +13,13 @@ import InventoryTable from './pages/InventoryTable';
 import InventoryDashboard from './pages/InventoryDashboard';
 import InventoryCheckInOut from './pages/InventoryCheckInOut';
 import { UserRoleProvider } from './UserRoleContext'; // ✅ wrap app in this
-
+import InventoryActivity from './pages/InventoryActivity';
+import InventoryAdminTable from './pages/InventoryAdminTable'; // adjust path if needed
+import QuickAccessToolbar from './Components/QuickAccessToolbar';
+const user = JSON.parse(localStorage.getItem('user') || '{}');
 function App() {
   return (
+    
     <UserRoleProvider>
       <Router>
         <div className="flex flex-col min-h-screen">
@@ -25,9 +29,11 @@ function App() {
             <aside className="w-64 bg-blue-900 text-white p-4 flex flex-col justify-between min-h-screen">
               {/* Top Section: Logo + Navigation */}
               <div>
-                <div className="bg-blue-800 p-4 text-center">
-                  <h2 className="text-xl font-bold">CNU DINING</h2>
-                </div>
+                <div className="bg-blue-800 p-4 flex items-center justify-center gap-3">
+  <img src="/cnulogo.png" alt="CNU Logo" className="h-8 w-auto" />
+  <h2 className="text-xl font-bold text-white">CNU DINING</h2>
+</div>
+
 
                 <nav className="mt-4">
                   <ul className="space-y-2">
@@ -48,6 +54,14 @@ function App() {
                         Inventory
                       </Link>
                     </li>
+                    <hr className="border-t border-gold-900 my-4"/>
+
+                    <li>
+  <Link to="/signup" className="block bg-blue-800 text-white px-3 py-2 rounded hover:bg-blue-700">
+    Sign Up
+  </Link>
+</li>
+
                     <li>
                       <button
                         onClick={() => {
@@ -68,7 +82,7 @@ function App() {
                 <img
                   src="/knotted_rope.png"
                   alt="Knotted Rope"
-                  className="mx-auto max-h-90 object-contain opacity-130"
+                  className="mx-auto max-h-30 object-contain opacity-90"
                 />
               </div>
             </aside>
@@ -88,6 +102,13 @@ function App() {
                 <Route path="/inventory-table" element={<InventoryTable />} />
                 <Route path="/inventory-dashboard" element={<InventoryDashboard />} />
                 <Route path="/inventory-check" element={<InventoryCheckInOut />} />
+                <Route path="/inventory-activity" element={<InventoryActivity />} />
+                <Route path="/inventory-admin" element={<InventoryAdminTable />} />
+                {user.role === 'admin' && (
+  <Route path="/inventory-admin" element={<InventoryAdminTable />} />
+)}
+
+
               </Routes>
             </main>
           </div>

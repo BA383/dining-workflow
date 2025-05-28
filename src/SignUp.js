@@ -63,6 +63,8 @@ function SignUp() {
           <option value="dining">Dining Services Staff</option>
           <option value="vendor">Vendor</option>
           <option value="business">Business Office</option>
+          <option value="admin">Admin</option>
+
         </select>
 
         <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
