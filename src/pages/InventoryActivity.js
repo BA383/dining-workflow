@@ -2,25 +2,51 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 
 function InventoryActivity() {
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const isAdmin = user.role === 'admin';
+
   const [logs, setLogs] = useState([]);
+  const [selectedUnit, setSelectedUnit] = useState(user.unit || '');
+
+  const units = ['Discovery', 'Regattas', 'Commons', 'Palette', 'Einstein'];
 
   useEffect(() => {
+    const fetchLogs = async () => {
+      const query = supabase.from('inventory_logs').select('*').order('timestamp', { ascending: false });
+      if (!isAdmin) {
+        query.eq('unit', user.unit);
+      } else if (selectedUnit) {
+        query.eq('unit', selectedUnit);
+      }
+
+      const { data, error } = await query;
+      if (!error) setLogs(data);
+      else console.error('Activity fetch error:', error.message);
+    };
+
     fetchLogs();
-  }, []);
-
-  const fetchLogs = async () => {
-    const { data, error } = await supabase
-      .from('inventory_logs')
-      .select('*')
-      .order('timestamp', { ascending: false });
-
-    if (error) console.error('❌ Failed to load logs:', error);
-    else setLogs(data);
-  };
+  }, [user.unit, selectedUnit, isAdmin]);
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Inventory Activity Log</h1>
+
+      {isAdmin && (
+        <div className="mb-4">
+          <label className="font-semibold mr-2">Filter by Unit:</label>
+          <select
+            value={selectedUnit}
+            onChange={(e) => setSelectedUnit(e.target.value)}
+            className="border p-2 rounded"
+          >
+            <option value="">-- All Units --</option>
+            {units.map((unit) => (
+              <option key={unit} value={unit}>{unit}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <table className="w-full border-collapse border text-sm">
         <thead className="bg-gray-100">
           <tr>

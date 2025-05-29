@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+
 import {
   PlusCircle,
   Table,
@@ -61,14 +62,16 @@ function InventoryDashboard() {
           <p className="text-sm text-gray-600">Edit or remove inventory items</p>
         </Link>
 
-        {/* Reports Placeholder */}
-        <div className="p-6 bg-white shadow rounded opacity-70">
-          <div className="flex items-center gap-3 mb-2">
-            <FileBarChart2 className="text-gray-400" />
-            <h2 className="text-xl font-semibold">Reports</h2>
-          </div>
-          <p className="text-sm text-gray-600">Coming soon: usage & waste reports</p>
-        </div>
+       {/* Make the Reports card clickable */}
+<Link to="/inventory-report" className="block">
+  <div className="p-6 bg-white shadow rounded hover:opacity-100 transition-opacity duration-200">
+    <div className="flex items-center gap-3 mb-2">
+      <FileBarChart2 className="text-gray-700" />
+      <h2 className="text-xl font-semibold">Reports</h2>
+    </div>
+    <p className="text-sm text-gray-600">Click to view usage & activity trends</p>
+  </div>
+</Link>
       </div>
     </div>
   );

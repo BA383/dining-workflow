@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 function Dashboard() {
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6 text-blue-900">Welcome to Dining Workflow ~ Knotted Together for Excellence</h1>
+      <h1 className="text-3xl font-bold mb-6 text-blue-900">Dining Workflow ~ Knotted Together for Excellence</h1>
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
