@@ -16,10 +16,10 @@ function Dashboard() {
           <h2 className="text-lg font-semibold text-blue-800 mb-2">💰 Submit Deposit</h2>
           <p className="text-sm text-gray-600">Fill out and send a transmittal form.</p>
         </Link>
-        <div className="bg-white p-4 border rounded shadow">
+        <Link to="/general-report" className="bg-white p-4 border rounded shadow">
           <h2 className="text-lg font-semibold text-blue-800 mb-2">📊 Reports</h2>
-          <p className="text-sm text-gray-600">Coming soon: Insights and tracking.</p>
-        </div>
+          <p className="text-sm text-gray-600">Insights and tracking.</p>
+        </Link>
         <Link to="/tasks" className="bg-white p-4 border rounded shadow hover:shadow-md transition">
           <h2 className="text-lg font-semibold text-blue-800 mb-2">📝 Start New Task</h2>
           <p className="text-sm text-gray-600">Launch a signature-required workflow form.</p>

@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import ScannerComponent from '../Components/ScannerComponent';
 import { supabase } from '../supabaseClient';
+import QRCode from 'qrcode';
 
 function InventoryForm() {
   const user = JSON.parse(localStorage.getItem('user'));
@@ -34,18 +35,23 @@ function InventoryForm() {
       alert('Please provide a barcode and item name.');
       return;
     }
+if (!form.unit) {
+  alert('Please select a unit to register this item under.');
+  return;
+}
 
-    // Check for duplicates
-    const { data: existing, error: checkError } = await supabase
-      .from('inventory')
-      .select('sku')
-      .eq('sku', form.barcode)
-      .maybeSingle();
+  const { data: existing, error: checkError } = await supabase
+  .from('inventory')
+  .select('sku')
+  .eq('sku', form.barcode)
+  .eq('unit', form.unit)
+  .maybeSingle();
 
-    if (existing) {
-      alert('❌ Item with this barcode already exists.');
-      return;
-    }
+if (existing) {
+  alert(`❌ Item with this barcode already exists for ${form.unit}.`);
+  return;
+}
+
 
     const newItem = {
       sku: form.barcode,
@@ -78,8 +84,10 @@ function InventoryForm() {
       email: form.email,
       timestamp: new Date(),
     }]);
-
+// Add this right after successful insert
+await generateAndDownloadQRCode(form.barcode);
     alert('✅ New inventory item registered.');
+
 
     setForm({
       barcode: '',
@@ -95,6 +103,20 @@ function InventoryForm() {
       notes: '',
     });
   };
+const generateAndDownloadQRCode = async (sku) => {
+  if (!sku) return;
+  try {
+    const qrDataUrl = await QRCode.toDataURL(sku);
+    const link = document.createElement('a');
+    link.href = qrDataUrl;
+    link.download = `${sku}_QR.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (err) {
+    console.error('❌ QR code generation failed:', err);
+  }
+};
 
   const handleScan = useCallback((barcode) => {
     setForm(prev => ({ ...prev, barcode }));
@@ -110,7 +132,9 @@ function InventoryForm() {
 
       <ScannerComponent onScan={handleScan} />
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+
         <input
           type="text"
           name="barcode"
@@ -120,13 +144,30 @@ function InventoryForm() {
           className="border rounded p-2 w-full"
         />
 
-        <input
-          type="text"
-          name="unit"
-          value={form.unit}
-          readOnly
-          className="border rounded p-2 w-full bg-gray-100 text-gray-600"
-        />
+        {user?.role === 'admin' ? (
+  <select
+    name="unit"
+    value={form.unit}
+    onChange={(e) => setForm({ ...form, unit: e.target.value })}
+    className="border rounded p-2 w-full"
+  >
+    <option value="">Select Unit</option>
+    <option value="Discovery">Discovery</option>
+    <option value="Regattas">Regattas</option>
+    <option value="Commons">Commons</option>
+    <option value="Palette">Palette</option>
+    <option value="Einstein">Einstein</option>
+  </select>
+) : (
+  <input
+    type="text"
+    name="unit"
+    value={form.unit}
+    readOnly
+    className="border rounded p-2 w-full bg-gray-100 text-gray-600"
+/>
+)}
+
 
         <input type="text" name="itemName" placeholder="Item Name" value={form.itemName} onChange={handleChange} className="border rounded p-2 w-full" />
         <input type="text" name="category" placeholder="Category" value={form.category} onChange={handleChange} className="border rounded p-2 w-full" />

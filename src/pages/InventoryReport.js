@@ -1,33 +1,66 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  PieChart, Pie, Cell
+} from 'recharts';
+
+const COLORS = ['#4ade80', '#60a5fa', '#f87171', '#c084fc', '#fbbf24'];
 
 function InventoryReport() {
   const [inventory, setInventory] = useState([]);
   const [logs, setLogs] = useState([]);
   const [trendData, setTrendData] = useState([]);
+  const [categoryData, setCategoryData] = useState([]);
+  const [unitFilter, setUnitFilter] = useState('');
+  const [units, setUnits] = useState([]);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const isAdmin = user.role === 'admin';
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetchUnits();
+    }
+    setUnitFilter(user.unit || '');
+  }, []);
 
   useEffect(() => {
     fetchInventory();
     fetchLogs();
-  }, []);
+  }, [unitFilter]);
+
+  const fetchUnits = async () => {
+    const { data, error } = await supabase.from('inventory').select('dining_unit');
+    if (!error && data) {
+      const uniqueUnits = [...new Set(
+        data.map(item => item.dining_unit?.trim()).filter(unit => !!unit)
+      )];
+      setUnits(uniqueUnits);
+    } else {
+      console.error('❌ Error fetching units:', error);
+    }
+  };
 
   const fetchInventory = async () => {
-    const { data, error } = await supabase
-      .from('inventory')
-      .select('*')
-      .eq('unit', user.unit);
-
-    if (!error) setInventory(data);
+    let query = supabase.from('inventory').select('*');
+    if (!isAdmin) query = query.eq('dining_unit', user.unit);
+    if (isAdmin && unitFilter) query = query.eq('dining_unit', unitFilter);
+    const { data, error } = await query;
+    if (!error) {
+      setInventory(data);
+      buildCategoryData(data);
+    }
   };
 
   const fetchLogs = async () => {
-    const { data, error } = await supabase
-      .from('inventory_logs')
-      .select('*')
-      .eq('unit', user.unit);
-
+    let query = supabase.from('inventory_logs').select('*');
+    if (!isAdmin) {
+      query = query.eq('dining_unit', user.unit);
+    }
+    if (isAdmin && unitFilter) {
+      query = query.eq('dining_unit', unitFilter);
+    }
+    const { data, error } = await query;
     if (!error) {
       setLogs(data);
       buildTrendData(data);
@@ -39,34 +72,92 @@ function InventoryReport() {
     logs.forEach((log) => {
       const date = new Date(log.timestamp);
       const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-
       if (!grouped[month]) grouped[month] = { month, checkin: 0, checkout: 0 };
-
       if (log.action === 'checkin') grouped[month].checkin += Number(log.quantity);
       if (log.action === 'checkout') grouped[month].checkout += Number(log.quantity);
     });
-
-    const trendArray = Object.values(grouped).map((entry) => ({
-      ...entry,
-      net: entry.checkin - entry.checkout,
-    })).sort((a, b) => new Date(`${a.month}-01`) - new Date(`${b.month}-01`));
-
+    const trendArray = Object.values(grouped).map(entry => ({ ...entry, net: entry.checkin - entry.checkout }))
+      .sort((a, b) => new Date(`${a.month}-01`) - new Date(`${b.month}-01`));
     setTrendData(trendArray);
   };
 
+  const buildCategoryData = (data) => {
+    const catTotals = {};
+    data.forEach(item => {
+      catTotals[item.category] = (catTotals[item.category] || 0) + Number(item.quantity);
+    });
+    const formatted = Object.entries(catTotals).map(([category, quantity]) => ({ name: category, value: quantity }));
+    setCategoryData(formatted);
+  };
+
+  const totalQuantity = inventory.reduce((sum, item) => sum + Number(item.quantity), 0);
+  const lowStockCount = inventory.filter(item => item.quantity < 5).length;
+  const totalValue = inventory.reduce((sum, item) => sum + (item.cost_per_unit || 0) * item.quantity, 0);
+  const uniqueCategories = [...new Set(inventory.map(item => item.category))].length;
+
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6 text-blue-900">Inventory Report</h1>
+    <div className="p-6 max-w-7xl mx-auto">
+      <h1 className="text-3xl font-bold mb-2 text-blue-900">
+        Inventory Report {isAdmin && unitFilter ? `– ${unitFilter}` : !isAdmin ? `– ${user.unit}` : ''}
+      </h1>
+
+      {isAdmin && (
+        <div className="mb-4">
+          <label className="text-sm font-medium">Filter by Unit:</label>
+          <select
+            className="ml-2 p-2 border rounded"
+            value={unitFilter}
+            onChange={(e) => setUnitFilter(e.target.value)}
+          >
+            <option value="">All Units</option>
+            {units.map((unit) => (
+              <option key={unit} value={unit}>{unit}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className="bg-white p-4 shadow rounded">
+          <p className="text-sm text-gray-500">Total Inventory Quantity</p>
+          <p className="text-xl font-semibold text-blue-800">{totalQuantity}</p>
+        </div>
+        <div className="bg-white p-4 shadow rounded">
+          <p className="text-sm text-gray-500">Low Stock Items</p>
+          <p className="text-xl font-semibold text-red-500">{lowStockCount}</p>
+        </div>
+        <div className="bg-white p-4 shadow rounded">
+          <p className="text-sm text-gray-500">Total Inventory Value</p>
+          <p className="text-xl font-semibold text-green-600">${totalValue.toFixed(2)}</p>
+        </div>
+        <div className="bg-white p-4 shadow rounded">
+          <p className="text-sm text-gray-500">Unique Categories</p>
+          <p className="text-xl font-semibold text-purple-600">{uniqueCategories}</p>
+        </div>
+      </div>
 
       <div className="mb-10">
-        <h2 className="text-xl font-semibold mb-2">Trend Visualization</h2>
-        <p className="text-sm text-gray-600 mb-4">✅ Trend Visualization – The chart below shows monthly trends in check-ins, check-outs, and net inventory change.</p>
+        <h2 className="text-xl font-semibold mb-2">Category Distribution</h2>
+        <ResponsiveContainer width="100%" height={250}>
+          <PieChart>
+            <Pie data={categoryData} dataKey="value" nameKey="name" outerRadius={100}>
+              {categoryData.map((entry, i) => (
+                <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip formatter={(value, name) => [`${value} units`, `${name}`]} />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="mb-10">
+        <h2 className="text-xl font-semibold mb-2">Inventory Trend</h2>
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={trendData} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="month" />
             <YAxis />
-            <Tooltip />
+            <Tooltip formatter={(value, name) => [`${value} items`, name]} />
             <Legend />
             <Line type="monotone" dataKey="checkin" stroke="#4ade80" name="Check-ins" />
             <Line type="monotone" dataKey="checkout" stroke="#f87171" name="Check-outs" />

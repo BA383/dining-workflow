@@ -18,6 +18,9 @@ import InventoryAdminTable from './pages/InventoryAdminTable';
 import QuickAccessToolbar from './Components/QuickAccessToolbar';
 import InventoryReport from './pages/InventoryReport';
 
+import GeneralReport from './pages/GeneralReport';
+
+
 
 const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -101,6 +104,8 @@ function App() {
                 <Route path="/inventory-activity" element={<InventoryActivity />} />
                 <Route path="/inventory-admin" element={<InventoryAdminTable />} />
                 <Route path="/inventory-report" element={<InventoryReport />} />
+                <Route path="/general-report" element={<GeneralReport />} />
+
 
                 {user.role === 'admin' && (
                   <Route path="/inventory-admin" element={<InventoryAdminTable />} />

@@ -26,11 +26,11 @@ function QuickAccessToolbar() {
         </Link>
         <Link to="/inventory-admin" className="flex flex-col items-center text-xs text-blue-700 hover:text-blue-900">
           <ShieldIcon className="h-5 w-5" />
-          Admin
+          Admin Inventory 
         </Link>
-        <Link to="/inventory-reports" className="flex flex-col items-center text-xs text-blue-700 hover:text-blue-900">
+        <Link to="/general-report" className="flex flex-col items-center text-xs text-blue-700 hover:text-blue-900">
           <BarChartIcon className="h-5 w-5" />
-          Reports
+          Admin Ops Reports
         </Link>
       </div>
     </div>

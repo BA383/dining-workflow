@@ -32,12 +32,14 @@ function InventoryCheckInOut() {
   }, [fetchInventory]);
 
   const handleScan = useCallback(async (barcode) => {
+const unitToQuery = user.role === 'admin' ? selectedUnit : user.unit;
     const { data, error } = await supabase
-      .from('inventory')
-      .select('*')
-      .eq('sku', barcode)
-      .eq('unit', user.unit)
-      .single();
+  .from('inventory')
+  .select('*')
+  .eq('sku', barcode) // this is the scanned code
+  .eq('unit', unitToQuery)
+  .single();
+
 
     if (error || !data) {
       setFeedback('Item not found.');
