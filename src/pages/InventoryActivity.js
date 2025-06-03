@@ -12,16 +12,24 @@ function InventoryActivity() {
 
   useEffect(() => {
     const fetchLogs = async () => {
-      const query = supabase.from('inventory_logs').select('*').order('timestamp', { ascending: false });
+      let query = supabase
+        .from('inventory_logs')
+        .select('*')
+        .order('timestamp', { ascending: false });
+
       if (!isAdmin) {
-        query.eq('unit', user.unit);
+        query = query.eq('dining_unit', user.unit); // ✅ Use dining_unit
       } else if (selectedUnit) {
-        query.eq('unit', selectedUnit);
+        query = query.eq('dining_unit', selectedUnit); // ✅ Use dining_unit
       }
 
       const { data, error } = await query;
-      if (!error) setLogs(data);
-      else console.error('Activity fetch error:', error.message);
+
+      if (error) {
+        console.error('Activity fetch error:', error.message);
+      } else {
+        setLogs(data);
+      }
     };
 
     fetchLogs();
@@ -33,7 +41,7 @@ function InventoryActivity() {
 
       {isAdmin && (
         <div className="mb-4">
-          <label className="font-semibold mr-2">Filter by Unit:</label>
+          <label className="font-semibold mr-2">Filter by unit:</label>
           <select
             value={selectedUnit}
             onChange={(e) => setSelectedUnit(e.target.value)}
@@ -56,6 +64,7 @@ function InventoryActivity() {
             <th className="border p-2">Qty</th>
             <th className="border p-2">Action</th>
             <th className="border p-2">Unit</th>
+            <th className="border p-2">Location</th>
             <th className="border p-2">User Email</th>
           </tr>
         </thead>
@@ -68,6 +77,7 @@ function InventoryActivity() {
               <td className="border p-2">{log.quantity}</td>
               <td className="border p-2">{log.action}</td>
               <td className="border p-2">{log.unit}</td>
+              <td className="border p-2">{log.location || '-'}</td>
               <td className="border p-2">{log.email}</td>
             </tr>
           ))}

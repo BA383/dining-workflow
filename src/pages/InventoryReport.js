@@ -30,21 +30,21 @@ function InventoryReport() {
   }, [unitFilter]);
 
   const fetchUnits = async () => {
-    const { data, error } = await supabase.from('inventory').select('dining_unit');
-    if (!error && data) {
-      const uniqueUnits = [...new Set(
-        data.map(item => item.dining_unit?.trim()).filter(unit => !!unit)
-      )];
-      setUnits(uniqueUnits);
-    } else {
-      console.error('❌ Error fetching units:', error);
-    }
+   const { data, error } = await supabase.from('inventory').select('dining_unit');
+if (!error && data) {
+  const uniqueUnits = [...new Set(
+    data.map(item => item.dining_unit?.trim()).filter(unit => !!unit)
+  )];
+  setUnits(uniqueUnits);
+}
+
+
   };
 
   const fetchInventory = async () => {
     let query = supabase.from('inventory').select('*');
     if (!isAdmin) query = query.eq('dining_unit', user.unit);
-    if (isAdmin && unitFilter) query = query.eq('dining_unit', unitFilter);
+if (isAdmin && unitFilter) query = query.eq('dining_unit', unitFilter);
     const { data, error } = await query;
     if (!error) {
       setInventory(data);
@@ -103,7 +103,7 @@ function InventoryReport() {
 
       {isAdmin && (
         <div className="mb-4">
-          <label className="text-sm font-medium">Filter by Unit:</label>
+          <label className="text-sm font-medium">Filter by unit:</label>
           <select
             className="ml-2 p-2 border rounded"
             value={unitFilter}
@@ -175,7 +175,7 @@ function InventoryReport() {
               <th className="border p-2">SKU</th>
               <th className="border p-2">Category</th>
               <th className="border p-2">Quantity</th>
-              <th className="border p-2">Unit</th>
+              <th className="border p-2">Dining Unit</th>
               <th className="border p-2">Location</th>
             </tr>
           </thead>
@@ -186,7 +186,7 @@ function InventoryReport() {
                 <td className="border p-2">{item.sku}</td>
                 <td className="border p-2">{item.category}</td>
                 <td className="border p-2">{item.quantity}</td>
-                <td className="border p-2">{item.unit}</td>
+                <td className="border p-2">{item.dining_unit}</td>
                 <td className="border p-2">{item.location}</td>
               </tr>
             ))}

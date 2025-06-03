@@ -30,7 +30,7 @@ function QuickAccessToolbar() {
         </Link>
         <Link to="/general-report" className="flex flex-col items-center text-xs text-blue-700 hover:text-blue-900">
           <BarChartIcon className="h-5 w-5" />
-          Admin Ops Reports
+          Director's Reports
         </Link>
       </div>
     </div>

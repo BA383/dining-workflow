@@ -16,10 +16,11 @@ function InventoryCheckInOut() {
   const query = supabase.from('inventory').select('*');
 
   if (user.role !== 'admin') {
-    query.eq('unit', user.unit);
-  } else if (selectedUnit) {
-    query.eq('unit', selectedUnit);
-  }
+  query.eq('dining_unit', user.unit);
+} else if (selectedUnit) {
+  query.eq('dining_unit', selectedUnit);
+}
+
 
   const { data, error } = await query;
   if (!error) setItems(data);
@@ -36,9 +37,10 @@ const unitToQuery = user.role === 'admin' ? selectedUnit : user.unit;
     const { data, error } = await supabase
   .from('inventory')
   .select('*')
-  .eq('sku', barcode) // this is the scanned code
-  .eq('unit', unitToQuery)
+  .eq('sku', barcode)
+  .eq('dining_unit', unitToQuery)
   .single();
+
 
 
     if (error || !data) {
@@ -54,8 +56,12 @@ const unitToQuery = user.role === 'admin' ? selectedUnit : user.unit;
   const fetchLog = async () => {
     const query = supabase.from('inventory_logs').select('*').order('timestamp', { ascending: false }).limit(10);
     if (user.role !== 'admin') {
-      query.eq('unit', user.unit);
-    }
+  query.eq('dining_unit', user.unit);
+}
+if (user.role === 'admin' && selectedUnit) {
+  query.eq('dining_unit', selectedUnit);
+}
+
     const { data, error } = await query;
     if (!error) setActivityLog(data);
   };
@@ -80,11 +86,12 @@ const unitToQuery = user.role === 'admin' ? selectedUnit : user.unit;
     const delta = action === 'checkin' ? parseInt(form.quantity) : -parseInt(form.quantity);
 
     const { data: existingItem, error: fetchError } = await supabase
-      .from('inventory')
-      .select('quantity')
-      .eq('sku', form.sku)
-      .eq('unit', user.unit)
-      .single();
+  .from('inventory')
+  .select('quantity')
+  .eq('sku', form.sku)
+  .eq('dining_unit', user.unit)  // ✅ changed from 'unit'
+  .single();
+
 
     if (fetchError || !existingItem) {
       alert('❌ Item not found or fetch failed.');
@@ -94,10 +101,11 @@ const unitToQuery = user.role === 'admin' ? selectedUnit : user.unit;
     const newQuantity = existingItem.quantity + delta;
 
     const { error: updateError } = await supabase
-      .from('inventory')
-      .update({ quantity: newQuantity })
-      .eq('sku', form.sku)
-      .eq('unit', user.unit);
+  .from('inventory')
+  .update({ quantity: newQuantity })
+  .eq('sku', form.sku)
+  .eq('dining_unit', user.unit);  // ✅ changed from 'unit'
+
 
     if (updateError) {
       alert('❌ Failed to update quantity: ' + updateError.message);
@@ -105,14 +113,15 @@ const unitToQuery = user.role === 'admin' ? selectedUnit : user.unit;
     }
 
     await supabase.from('inventory_logs').insert([{
-      sku: form.sku,
-      name: form.name,
-      quantity: form.quantity,
-      action,
-      unit: user.unit,
-      email: user.email,
-      timestamp: new Date()
-    }]);
+  sku: form.sku,
+  name: form.name,
+  quantity: form.quantity,
+  action,
+  dining_unit: user.unit,  // ✅ new field name
+  email: user.email,
+  timestamp: new Date()
+}]);
+
 
     const existingIndex = items.findIndex(item => item.sku === form.sku);
     let updatedItems = [...items];
@@ -133,7 +142,7 @@ const unitToQuery = user.role === 'admin' ? selectedUnit : user.unit;
 
       {user.role === 'admin' && (
         <div className="mb-4">
-          <label className="mr-2 font-semibold">Filter by Unit:</label>
+          <label className="mr-2 font-semibold">Filter by unit:</label>
           <select
             value={selectedUnit}
             onChange={(e) => setSelectedUnit(e.target.value)}
