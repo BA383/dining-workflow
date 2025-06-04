@@ -1,12 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import {
-  ScanIcon,
-  BanknoteIcon,
-  FileTextIcon,
-  ShieldIcon,
-  BarChartIcon
-} from 'lucide-react';
+import { ScanIcon, BanknoteIcon, FileTextIcon, ShieldIcon, BarChartIcon, BookOpenIcon } from 'lucide-react';
 
 function QuickAccessToolbar() {
   return (
@@ -31,6 +25,10 @@ function QuickAccessToolbar() {
         <Link to="/general-report" className="flex flex-col items-center text-xs text-blue-700 hover:text-blue-900">
           <BarChartIcon className="h-5 w-5" />
           Director's Reports
+        </Link>
+        <Link to="/workflow-manual" className="flex flex-col items-center text-xs text-blue-700 hover:text-blue-900">
+          <BookOpenIcon className="h-5 w-5" />
+          Manual
         </Link>
       </div>
     </div>

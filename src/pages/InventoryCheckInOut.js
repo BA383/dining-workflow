@@ -34,7 +34,9 @@ function InventoryCheckInOut() {
 
   const handleScan = useCallback(async (barcode) => {
 const unitToQuery = user.role === 'admin' ? selectedUnit : user.unit;
-    const { data, error } = await supabase
+console.log('Looking up SKU:', barcode, 'for unit:', unitToQuery);
+
+const { data, error } = await supabase
   .from('inventory')
   .select('*')
   .eq('sku', barcode)
@@ -112,14 +114,15 @@ if (user.role === 'admin' && selectedUnit) {
       return;
     }
 
-    await supabase.from('inventory_logs').insert([{
+await supabase.from('inventory_logs').insert([{
   sku: form.sku,
   name: form.name,
   quantity: form.quantity,
   action,
-  dining_unit: user.unit,  // ✅ new field name
+  location: items.find(i => i.sku === form.sku)?.location || '',
+  dining_unit: user.role === 'admin' ? selectedUnit : user.unit,
   email: user.email,
-  timestamp: new Date()
+  timestamp: new Date(),
 }]);
 
 

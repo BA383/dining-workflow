@@ -7,18 +7,19 @@ function InventoryForm() {
   const user = JSON.parse(localStorage.getItem('user'));
 
   const [form, setForm] = useState({
-    barcode: '',
-    unit: user?.unit || '',
-    email: user?.email || '',
-    itemName: '',
-    category: '',
-    quantity: '',
-    unitPrice: '',
-    unitMeasure: '',
-    location: '',
-    dateReceived: '',
-    notes: '',
-  });
+  barcode: '',
+  dining_unit: user?.role === 'admin' ? 'Administration' : user?.unit || '',
+  email: user?.email || '',
+  itemName: '',
+  category: '',
+  quantity: '',
+  unitPrice: '',
+  unitMeasure: '',
+  location: '',
+  dateReceived: '',
+  notes: '',
+});
+
 
   const unitOptions = ['ea', 'case', 'lbs', 'gallons', 'box', 'can', 'pack', 'tray'];
   const categoryOptions = [
@@ -41,10 +42,11 @@ function InventoryForm() {
       alert('Please provide a barcode and item name.');
       return;
     }
-    if (!form.unit) {
-      alert('Please select a unit to register this item under.');
-      return;
-    }
+    if (!form.dining_unit) {
+  alert('Please select a unit to register this item under.');
+  return;
+}
+
 
     const { data: existing, error: checkError } = await supabase
       .from('inventory')
@@ -58,19 +60,22 @@ function InventoryForm() {
       return;
     }
 
-    const newItem = {
-      sku: form.barcode,
-      name: form.itemName,
-      category: form.category,
-      unit: form.unit,
-      quantity: toNumber(form.quantity),
-      unitPrice: toNumber(form.unitPrice),
-      extendedPrice,
-      location: form.location,
-      date_received: form.dateReceived || null,
-      notes: form.notes,
-      user_email: form.email,
-    };
+const newItem = {
+  sku: form.barcode,
+  name: form.itemName,
+  category: form.category,
+  unit: form.unitMeasure, // Unit of measure (ea, box, etc.)
+  quantity: toNumber(form.quantity),
+  unitPrice: toNumber(form.unitPrice),
+  extendedPrice,
+  location: form.location,
+  date_received: form.dateReceived || null,
+  notes: form.notes,
+  user_email: form.email,
+  dining_unit: form.unit, // ✅ Fix: use 'form.unit' here
+};
+
+
 
     const { error } = await supabase.from('inventory').insert([newItem]);
 
@@ -132,8 +137,9 @@ function InventoryForm() {
     <div className="p-6 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Register Inventory Item</h1>
       <p className="text-sm text-gray-700 mb-2">
-        <strong>Active unit:</strong> {form.unit || 'Unknown'}
-      </p>
+  <strong>Active unit:</strong> {form.dining_unit || 'Not Assigned'}
+</p>
+
 
       <ScannerComponent onScan={handleScan} />
 
@@ -147,29 +153,31 @@ function InventoryForm() {
           className="border rounded p-2 w-full"
         />
 
-        {user?.role === 'admin' ? (
-          <select
-            name="unit"
-            value={form.unit}
-            onChange={(e) => setForm({ ...form, unit: e.target.value })}
-            className="border rounded p-2 w-full"
-          >
-            <option value="">Select Unit</option>
-            <option value="Discovery">Discovery</option>
-            <option value="Regattas">Regattas</option>
-            <option value="Commons">Commons</option>
-            <option value="Palette">Palette</option>
-            <option value="Einstein">Einstein</option>
-          </select>
-        ) : (
-          <input
-            type="text"
-            name="unit"
-            value={form.unit}
-            readOnly
-            className="border rounded p-2 w-full bg-gray-100 text-gray-600"
-          />
-        )}
+       {user?.role === 'admin' ? (
+  <select
+    name="dining_unit"
+    value={form.dining_unit}
+    onChange={(e) => setForm({ ...form, dining_unit: e.target.value })}
+    
+    className="border rounded p-2 w-full"
+  >
+    <option value="">Select Dining Unit</option>
+    <option value="Discovery">Discovery</option>
+    <option value="Regattas">Regattas</option>
+    <option value="Commons">Commons</option>
+    <option value="Palette">Palette</option>
+    <option value="Einstein">Einstein</option>
+  </select>
+) : (
+  <input
+    type="text"
+    name="dining_unit"
+    value={form.dining_unit}
+    readOnly
+    className="border rounded p-2 w-full bg-gray-100 text-gray-600"
+  />
+)}
+
 
         <input
           type="text"

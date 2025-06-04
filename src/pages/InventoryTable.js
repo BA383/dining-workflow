@@ -118,6 +118,8 @@ const uploadToSupabase = async (rows) => {
       name: row['item name'] || row.name || '',
       sku: row['sku'] || '',
       category: row['category'] || '',
+
+
       quantity,
       unitPrice,
       extendedPrice: quantity * unitPrice,
@@ -127,12 +129,14 @@ const uploadToSupabase = async (rows) => {
       location: row['LOCATION'] || row['Location'] || row.location || '',
       unitlocation: row['unit location'] || '',
       notes: row['notes'] || '',
-      dining_unit: row['Dining Unit']?.trim() || user.unit || selectedUnit || 'Unknown',
+      dining_unit: row['Dining Unit']?.trim() || (user.role === 'admin' ? selectedUnit : user.unit) || 'Unknown',
+
 
       unit: row['unit'] || '',
       user_email: user.email || '',
     };
   });
+console.log('Category in formatted upload:', formatted.map(f => f.category));
 
   console.log('Uploading this to Supabase:', formatted);
 
@@ -326,7 +330,7 @@ const uploadToSupabase = async (rows) => {
         <td className="border p-2">{item.location || '-'}</td> {/* ✅ Add this */}
         <td className="border p-2">${item.unitPrice?.toFixed(2)}</td>
         <td className="border p-2 text-right">
-          ${((item.quantity || 0) * (item.unitPrice || 0)).toFixed(2)}
+        ${((item.quantity || 0) * (item.unitPrice || 0)).toFixed(2)}
         </td>
       </tr>
     ))}

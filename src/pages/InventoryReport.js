@@ -16,6 +16,13 @@ function InventoryReport() {
   const [units, setUnits] = useState([]);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'admin';
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 10; // You can change this to 25, 50, etc.
+  const indexOfLastRow = currentPage * rowsPerPage;
+  const indexOfFirstRow = indexOfLastRow - rowsPerPage;
+  const currentRows = inventory.slice(indexOfFirstRow, indexOfLastRow);
+
+
 
   useEffect(() => {
     if (isAdmin) {
@@ -180,18 +187,51 @@ if (isAdmin && unitFilter) query = query.eq('dining_unit', unitFilter);
             </tr>
           </thead>
           <tbody>
-            {inventory.map((item, i) => (
-              <tr key={i}>
-                <td className="border p-2">{item.name}</td>
-                <td className="border p-2">{item.sku}</td>
-                <td className="border p-2">{item.category}</td>
-                <td className="border p-2">{item.quantity}</td>
-                <td className="border p-2">{item.dining_unit}</td>
-                <td className="border p-2">{item.location}</td>
-              </tr>
-            ))}
-          </tbody>
+  {currentRows.map((item, i) => (
+    <tr key={i}>
+      <td className="border p-2">{item.name}</td>
+      <td className="border p-2">{item.sku}</td>
+      <td className="border p-2">{item.category}</td>
+      <td className="border p-2">{item.quantity}</td>
+      <td className="border p-2">{item.dining_unit}</td>
+      <td className="border p-2">{item.location}</td>
+    </tr>
+  ))}
+</tbody>
+<div className="flex justify-between items-center mt-4 mb-2">
+  <label className="text-sm text-gray-700">
+    Rows per page:
+    <select
+      value={rowsPerPage}
+      onChange={(e) => {
+        setRowsPerPage(Number(e.target.value));
+        setCurrentPage(1); // Reset to page 1
+      }}
+      className="ml-2 p-1 border rounded"
+    >
+      <option value={5}>5</option>
+      <option value={10}>10</option>
+      <option value={25}>25</option>
+      <option value={50}>50</option>
+    </select>
+  </label>
+</div>
+
         </table>
+        <div className="flex justify-center mt-4 space-x-2">
+  {Array.from({ length: Math.ceil(inventory.length / rowsPerPage) }, (_, i) => (
+    <button
+      key={i}
+      className={`px-3 py-1 rounded ${
+        currentPage === i + 1 ? 'bg-blue-600 text-white' : 'bg-gray-200'
+      }`}
+      onClick={() => setCurrentPage(i + 1)}
+    >
+      {i + 1}
+    </button>
+  ))}
+</div>
+
       </div>
     </div>
   );

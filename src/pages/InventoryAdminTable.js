@@ -46,37 +46,40 @@ function InventoryAdminTable() {
     if (error) return alert('Update failed: ' + error.message);
 
     await supabase.from('inventory_logs').insert([{
-  sku: item.sku,
-  name: item.name,
-  quantity: item.quantity,
-  location: item.location,
-  action: 'edit',
-  dining_unit: user.unit,
-  email: user.email,
-  timestamp: new Date(),
-}]);
-
+      sku: item.sku,
+      name: item.name,
+      quantity: item.quantity,
+      location: item.location,
+      category: item.category,
+      unit: item.unit,
+      action: 'edit',
+      dining_unit: item.dining_unit,
+      email: user.email,
+      timestamp: new Date(),
+    }]);
 
     alert('Update successful!');
     setEditingItemId(null);
     fetchItems();
   };
 
-  const handleDelete = async (id, sku, name) => {
+  const handleDelete = async (id) => {
+    const item = items.find(i => i.id === id);
     const { error } = await supabase.from('inventory').delete().eq('id', id);
     if (error) return alert('Delete failed: ' + error.message);
 
     await supabase.from('inventory_logs').insert([{
-  sku,
-  name,
-  quantity: item.quantity,     // You may need to pass `item` instead of just id, sku, name
-  location: item.location,
-  action: 'delete',
-  dining_unit: user.unit,
-  email: user.email,
-  timestamp: new Date(),
-}]);
-
+      sku: item.sku,
+      name: item.name,
+      quantity: item.quantity,
+      location: item.location,
+      category: item.category,
+      unit: item.unit,
+      action: 'delete',
+      dining_unit: item.dining_unit,
+      email: user.email,
+      timestamp: new Date(),
+    }]);
 
     alert('Item deleted.');
     fetchItems();
@@ -90,8 +93,12 @@ function InventoryAdminTable() {
     const logs = deletedItems.map(item => ({
       sku: item.sku,
       name: item.name,
+      quantity: item.quantity,
+      location: item.location,
+      category: item.category,
+      unit: item.unit,
       action: 'bulk delete',
-      dining_unit: user.unit,
+      dining_unit: item.dining_unit,
       email: user.email,
       timestamp: new Date(),
     }));
@@ -129,7 +136,7 @@ function InventoryAdminTable() {
             <th className="border p-2">SKU</th>
             <th className="border p-2">Category</th>
             <th className="border p-2">Qty</th>
-            <th className="border p-2">Unit</th>
+            <th className="border p-2">Dining Unit</th>
             <th className="border p-2">Location</th>
             <th className="border p-2">Unit Price</th>
             <th className="border p-2">Notes</th>
@@ -226,7 +233,7 @@ function InventoryAdminTable() {
                   Save
                 </button>
                 <button
-                  onClick={() => handleDelete(item.id, item.sku, item.name)}
+                  onClick={() => handleDelete(item.id)}
                   className="text-red-600 hover:underline"
                 >
                   Delete
