@@ -1,9 +1,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import BackToAdminDashboard from './BackToAdminDashboard';
 
 function Tasks() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
+      <BackToAdminDashboard />
       <h1 className="text-2xl font-bold text-blue-900 mb-4">Start a New Task</h1>
       <p className="text-gray-700 mb-6">
         Choose a workflow below to begin. More task types will be added as we integrate new forms and DocuSign routing.

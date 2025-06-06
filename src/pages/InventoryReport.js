@@ -4,6 +4,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
+import BackToInventoryDashboard from '../Components/BackToInventoryDashboard';
 
 const COLORS = ['#4ade80', '#60a5fa', '#f87171', '#c084fc', '#fbbf24'];
 
@@ -98,12 +99,23 @@ if (isAdmin && unitFilter) query = query.eq('dining_unit', unitFilter);
   };
 
   const totalQuantity = inventory.reduce((sum, item) => sum + Number(item.quantity), 0);
-  const lowStockCount = inventory.filter(item => item.quantity < 5).length;
-  const totalValue = inventory.reduce((sum, item) => sum + (item.cost_per_unit || 0) * item.quantity, 0);
+  
+  const lowStockCount = inventory.filter(item =>
+  item.reorder_level && item.quantity < item.reorder_level
+).length;
+
+
+  const totalValue = inventory.reduce((sum, item) => {
+  const price = parseFloat(item.unitPrice) || 0;
+  const qty = parseFloat(item.quantity) || 0;
+  return sum + price * qty;
+}, 0);
+
   const uniqueCategories = [...new Set(inventory.map(item => item.category))].length;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      <BackToInventoryDashboard />
       <h1 className="text-3xl font-bold mb-2 text-blue-900">
         Inventory Report {isAdmin && unitFilter ? `– ${unitFilter}` : !isAdmin ? `– ${user.unit}` : ''}
       </h1>

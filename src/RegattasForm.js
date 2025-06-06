@@ -1,7 +1,11 @@
 import Papa from 'papaparse'; // CSV parser library
+
 import * as XLSX from 'xlsx';
 
 import React, { useState, useEffect } from 'react';
+import BackToAdminDashboard from './BackToAdminDashboard';
+
+
 
 const mapField = (target, label, value) => {
   const cleanLabel = label.toLowerCase();
@@ -283,6 +287,7 @@ useEffect(() => {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
+      <BackToAdminDashboard />
       <h1 className="text-2xl font-bold mb-6">Dining Deposit Transmittal</h1>
 {/* Upload CSV input */}
 <input

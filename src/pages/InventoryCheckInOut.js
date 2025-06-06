@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ScannerComponent from '../Components/ScannerComponent';
 import { supabase } from '../supabaseClient';
+import BackToInventoryDashboard from '../Components/BackToInventoryDashboard';
 
 function InventoryCheckInOut() {
   const [action, setAction] = useState('checkin');
@@ -33,26 +34,37 @@ function InventoryCheckInOut() {
   }, [fetchInventory]);
 
   const handleScan = useCallback(async (barcode) => {
-const unitToQuery = user.role === 'admin' ? selectedUnit : user.unit;
+const unitToQuery = (user.role === 'admin' ? selectedUnit : user.unit || '').trim();
+
 console.log('Looking up SKU:', barcode, 'for unit:', unitToQuery);
 
 const { data, error } = await supabase
   .from('inventory')
   .select('*')
   .eq('sku', barcode)
-  .eq('dining_unit', unitToQuery)
-  .single();
+  .eq('dining_unit', unitToQuery);
+
+if (error) {
+  setFeedback('❌ Error fetching item.');
+  return;
+}
+
+if (!data || data.length === 0) {
+  setFeedback('❌ Item not found.');
+  return;
+}
+
+if (data.length > 1) {
+  setFeedback('⚠️ This SKU is registered under multiple entries. Please ensure each SKU is uniquely assigned per category.');
+  return;
+}
+
+const item = data[0]; // ✅ now safe to access
+setForm({ sku: barcode, name: item.name, quantity: 1 });
+setFeedback('');
 
 
-
-    if (error || !data) {
-      setFeedback('Item not found.');
-      return;
-    }
-
-    setForm({ sku: barcode, name: data.name, quantity: 1 });
-    setFeedback('');
-  }, [user.unit]);
+  }, [selectedUnit, user.unit]);
 
   useEffect(() => {
   const fetchLog = async () => {
@@ -78,69 +90,76 @@ if (user.role === 'admin' && selectedUnit) {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!user.unit) {
-      alert('User unit not defined. Please log in again.');
-      return;
-    }
-    if (!form.sku || !form.quantity) return;
-
-    const delta = action === 'checkin' ? parseInt(form.quantity) : -parseInt(form.quantity);
-
-    const { data: existingItem, error: fetchError } = await supabase
-  .from('inventory')
-  .select('quantity')
-  .eq('sku', form.sku)
-  .eq('dining_unit', user.unit)  // ✅ changed from 'unit'
-  .single();
+  e.preventDefault();
+  const unitToQuery = (user.role === 'admin' ? selectedUnit : user.unit || '').trim();
 
 
-    if (fetchError || !existingItem) {
-      alert('❌ Item not found or fetch failed.');
-      return;
-    }
+  if (!unitToQuery) {
+    alert('User unit not defined. Please log in again.');
+    return;
+  }
+  if (!form.sku || !form.quantity) return;
 
-    const newQuantity = existingItem.quantity + delta;
+  const delta = action === 'checkin' ? parseInt(form.quantity) : -parseInt(form.quantity);
 
-    const { error: updateError } = await supabase
-  .from('inventory')
-  .update({ quantity: newQuantity })
-  .eq('sku', form.sku)
-  .eq('dining_unit', user.unit);  // ✅ changed from 'unit'
+  const { data: existingItem, error: fetchError } = await supabase
+    .from('inventory')
+    .select('quantity')
+    .eq('sku', form.sku)
+    .eq('dining_unit', unitToQuery)
+    .single();
 
+  if (fetchError || !existingItem) {
+    alert('❌ Item not found or fetch failed.');
+    return;
+  }
 
-    if (updateError) {
-      alert('❌ Failed to update quantity: ' + updateError.message);
-      return;
-    }
+  const newQuantity = existingItem.quantity + delta;
 
-await supabase.from('inventory_logs').insert([{
-  sku: form.sku,
-  name: form.name,
-  quantity: form.quantity,
-  action,
-  location: items.find(i => i.sku === form.sku)?.location || '',
-  dining_unit: user.role === 'admin' ? selectedUnit : user.unit,
-  email: user.email,
-  timestamp: new Date(),
-}]);
+  const { error: updateError } = await supabase
+    .from('inventory')
+    .update({ quantity: newQuantity })
+    .eq('sku', form.sku)
+    .eq('dining_unit', unitToQuery);
 
+  if (updateError) {
+    alert('❌ Failed to update quantity: ' + updateError.message);
+    return;
+  }
+await supabase.rpc('set_config', {
+  config_key: 'request.unit',
+  config_value: unitToQuery,
+});
 
-    const existingIndex = items.findIndex(item => item.sku === form.sku);
-    let updatedItems = [...items];
+  await supabase.from('inventory_logs').insert([{
+    sku: form.sku,
+    name: form.name,
+    quantity: form.quantity,
+    action,
+    location: items.find(i => i.sku === form.sku)?.location || '',
+    dining_unit: unitToQuery,
+    email: user.email,
+    timestamp: new Date(),
+  }]);
 
-    if (existingIndex !== -1) {
-      updatedItems[existingIndex].quantity = newQuantity;
-    } else {
-      updatedItems.push({ ...form, quantity: newQuantity });
-    }
+  // 🔁 Reflect change in master table
+  const existingIndex = items.findIndex(item => item.sku === form.sku);
+  let updatedItems = [...items];
 
-    setItems(updatedItems);
-    setForm({ sku: '', name: '', quantity: 0 });
-  };
+  if (existingIndex !== -1) {
+    updatedItems[existingIndex].quantity = newQuantity;
+  } else {
+    updatedItems.push({ ...form, quantity: newQuantity });
+  }
+
+  setItems(updatedItems);
+  setForm({ sku: '', name: '', quantity: 0 });
+};
+
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
+      <BackToInventoryDashboard />
       <h1 className="text-2xl font-bold text-blue-900 mb-4">Inventory Check-In / Check-Out</h1>
 
       {user.role === 'admin' && (

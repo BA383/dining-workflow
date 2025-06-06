@@ -1,42 +1,44 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
+import BackToInventoryDashboard from '../Components/BackToInventoryDashboard';
 
 function InventoryActivity() {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'admin';
 
   const [logs, setLogs] = useState([]);
-  const [selectedUnit, setSelectedUnit] = useState(user.unit || '');
+  const [selectedUnit, setSelectedUnit] = useState(isAdmin ? '' : user.unit);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const units = ['Discovery', 'Regattas', 'Commons', 'Palette', 'Einstein'];
 
   useEffect(() => {
-    const fetchLogs = async () => {
-      let query = supabase
-        .from('inventory_logs')
-        .select('*')
-        .order('timestamp', { ascending: false });
+  const fetchLogs = async () => {
+    let query = supabase
+      .from('inventory_logs')
+      .select('*')
+      .order('timestamp', { ascending: false });
 
-      if (!isAdmin) {
-        query.eq('dining_unit', user.unit);
-      } else if (selectedUnit) {
-        query.eq('dining_unit', selectedUnit);
-      }
+    if (!isAdmin) {
+      query = query.eq('dining_unit', user.unit);
+    } else if (selectedUnit) {
+      query = query.eq('dining_unit', selectedUnit);
+    }
 
-      const { data, error } = await query;
+    const { data, error } = await query;
 
-      if (error) {
-        console.error('Activity fetch error:', error.message);
-      } else {
-        setLogs(data || []);
-        setCurrentPage(1); // Reset to page 1 on filter change
-      }
-    };
+    if (error) {
+      console.error('Activity fetch error:', error.message);
+    } else {
+      setLogs(data || []);
+      setCurrentPage(1);
+    }
+  };
 
-    fetchLogs();
-  }, [user.unit, selectedUnit, isAdmin]);
+  fetchLogs();
+}, [selectedUnit, isAdmin, user.unit]);
+
 
   const indexOfLast = currentPage * rowsPerPage;
   const indexOfFirst = indexOfLast - rowsPerPage;
@@ -45,6 +47,7 @@ function InventoryActivity() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
+    <BackToInventoryDashboard />  
       <h1 className="text-2xl font-bold mb-4">Inventory Activity Log</h1>
 
       {/* Unit filter */}

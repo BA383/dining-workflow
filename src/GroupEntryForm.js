@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import BackToAdminDashboard from './BackToAdminDashboard';
 
 function GroupEntryForm() {
   const navigate = useNavigate();
@@ -44,6 +45,7 @@ function GroupEntryForm() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
+      <BackToAdminDashboard />
       <h1 className="text-2xl font-bold text-blue-900 mb-6">CNU Internal Group Entry Form</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import BackToInventoryDashboard from '../Components/BackToInventoryDashboard';
 
 function InventoryAdminTable() {
   const user = JSON.parse(localStorage.getItem('user'));
@@ -40,23 +41,30 @@ function InventoryAdminTable() {
   };
 
   const handleUpdate = async (item) => {
+    await supabase.rpc('set_config', {
+      config_key: 'request.unit',
+      config_value: item.dining_unit || user.unit,
+    });
+
     const { id, ...updateFields } = item;
     const { error } = await supabase.from('inventory').update(updateFields).eq('id', id);
 
     if (error) return alert('Update failed: ' + error.message);
 
-    await supabase.from('inventory_logs').insert([{
+    const { error: logError } = await supabase.from('inventory_logs').insert([{
       sku: item.sku,
       name: item.name,
       quantity: item.quantity,
-      location: item.location,
-      category: item.category,
-      unit: item.unit,
+      location: item.location || '',
+      category: item.category || '',
+      unit: item.unit || '',
       action: 'edit',
-      dining_unit: item.dining_unit,
-      email: user.email,
+      dining_unit: item.dining_unit || user.unit,
+      email: user.email || '',
       timestamp: new Date(),
     }]);
+
+    if (logError) console.error('Log insert error:', logError.message);
 
     alert('Update successful!');
     setEditingItemId(null);
@@ -65,19 +73,29 @@ function InventoryAdminTable() {
 
   const handleDelete = async (id) => {
     const item = items.find(i => i.id === id);
+    await supabase.rpc('set_config', {
+      config_key: 'request.unit',
+      config_value: item.dining_unit || user.unit,
+    });
+
     const { error } = await supabase.from('inventory').delete().eq('id', id);
     if (error) return alert('Delete failed: ' + error.message);
+    
+await supabase.rpc('set_config', {
+  config_key: 'request.unit',
+  config_value: item.dining_unit || user.unit,
+});
 
     await supabase.from('inventory_logs').insert([{
       sku: item.sku,
       name: item.name,
       quantity: item.quantity,
-      location: item.location,
-      category: item.category,
-      unit: item.unit,
+      location: item.location || '',
+      category: item.category || '',
+      unit: item.unit || '',
       action: 'delete',
-      dining_unit: item.dining_unit,
-      email: user.email,
+      dining_unit: item.dining_unit || user.unit,
+      email: user.email || '',
       timestamp: new Date(),
     }]);
 
@@ -86,20 +104,27 @@ function InventoryAdminTable() {
   };
 
   const handleBulkDelete = async () => {
+    const deletedItems = items.filter(item => selectedItems.includes(item.id));
+    if (deletedItems.length === 0) return;
+
+    await supabase.rpc('set_config', {
+      config_key: 'request.unit',
+      config_value: deletedItems[0].dining_unit || user.unit,
+    });
+
     const { error } = await supabase.from('inventory').delete().in('id', selectedItems);
     if (error) return alert('Bulk delete failed: ' + error.message);
 
-    const deletedItems = items.filter(item => selectedItems.includes(item.id));
     const logs = deletedItems.map(item => ({
       sku: item.sku,
       name: item.name,
       quantity: item.quantity,
-      location: item.location,
-      category: item.category,
-      unit: item.unit,
+      location: item.location || '',
+      category: item.category || '',
+      unit: item.unit || '',
       action: 'bulk delete',
-      dining_unit: item.dining_unit,
-      email: user.email,
+      dining_unit: item.dining_unit || user.unit,
+      email: user.email || '',
       timestamp: new Date(),
     }));
 
@@ -117,6 +142,7 @@ function InventoryAdminTable() {
 
   return (
     <div className="p-6">
+    <BackToInventoryDashboard />  
       <h1 className="text-2xl font-bold mb-4">Admin Inventory Management</h1>
 
       {selectedItems.length > 0 && (

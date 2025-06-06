@@ -2,6 +2,8 @@ import React, { useState, useCallback } from 'react';
 import ScannerComponent from '../Components/ScannerComponent';
 import { supabase } from '../supabaseClient';
 import QRCode from 'qrcode';
+import BackToInventoryDashboard from '../Components/BackToInventoryDashboard';
+
 
 function InventoryForm() {
   const user = JSON.parse(localStorage.getItem('user'));
@@ -18,6 +20,7 @@ function InventoryForm() {
   location: '',
   dateReceived: '',
   notes: '',
+  reorder_level: '', // ✅ Add this line
 });
 
 
@@ -48,23 +51,32 @@ function InventoryForm() {
 }
 
 
-    const { data: existing, error: checkError } = await supabase
-      .from('inventory')
-      .select('sku')
-      .eq('sku', form.barcode)
-      .eq('unit', form.unit)
-      .maybeSingle();
+// ✅ Check for existing SKU within the same dining unit
+const { data: existing, error: checkError } = await supabase
+  .from('inventory')
+  .select('id')
+  .eq('sku', form.barcode)
+  .eq('dining_unit', form.dining_unit);
 
-    if (existing) {
-      alert(`❌ Item with this barcode already exists for ${form.unit}.`);
-      return;
-    }
+if (checkError) {
+  console.error('Error checking SKU uniqueness:', checkError.message);
+  alert('❌ Could not verify SKU. Please try again.');
+  return;
+}
+
+if (existing && existing.length > 0) {
+  alert('⚠️ This SKU is already registered for this dining unit. Please use a unique SKU or update the existing item.');
+  return;
+}
+
+
+
 
 const newItem = {
   sku: form.barcode,
   name: form.itemName,
   category: form.category,
-  unit: form.unitMeasure, // Unit of measure (ea, box, etc.)
+  unit: form.unitMeasure,
   quantity: toNumber(form.quantity),
   unitPrice: toNumber(form.unitPrice),
   extendedPrice,
@@ -72,27 +84,38 @@ const newItem = {
   date_received: form.dateReceived || null,
   notes: form.notes,
   user_email: form.email,
-  dining_unit: form.unit, // ✅ Fix: use 'form.unit' here
+  dining_unit: (form.dining_unit || '').trim(),   // ✅ Trim any whitespace
+  reorder_level: toNumber(form.reorder_level),    // ✅ Store as number
 };
 
 
 
-    const { error } = await supabase.from('inventory').insert([newItem]);
+
+
+   const { error: insertError } = await supabase.from('inventory').insert([newItem]);
+
 
     if (error) {
       alert('❌ Error submitting: ' + error.message);
       return;
     }
+await supabase.rpc('set_config', {
+  config_key: 'request.unit',
+  config_value: form.dining_unit,
+});
 
-    await supabase.from('inventory_logs').insert([{
-      sku: form.barcode,
-      name: form.itemName,
-      quantity: form.quantity,
-      action: 'register',
-      unit: form.unit,
-      email: form.email,
-      timestamp: new Date(),
-    }]);
+await supabase.from('inventory_logs').insert([{
+  sku: form.barcode,
+  name: form.itemName,
+  quantity: form.quantity,
+  action: 'register',
+  unit: form.unitMeasure,           // ✅ this means unit of measure
+  location: form.location,          // ✅ include this
+  dining_unit: form.dining_unit,    // ✅ correct field!
+  email: form.email,
+  timestamp: new Date(),
+}]);
+
 
     await generateAndDownloadQRCode(form.barcode);
 
@@ -110,6 +133,7 @@ const newItem = {
       location: '',
       dateReceived: '',
       notes: '',
+      reorder_level: '', // ✅ Reset here
     });
   };
 
@@ -135,6 +159,8 @@ const newItem = {
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
+      <BackToInventoryDashboard />
+
       <h1 className="text-2xl font-bold mb-4">Register Inventory Item</h1>
       <p className="text-sm text-gray-700 mb-2">
   <strong>Active unit:</strong> {form.dining_unit || 'Not Assigned'}
@@ -199,7 +225,14 @@ const newItem = {
         </select>
 
         <input type="number" name="quantity" placeholder="Quantity" value={form.quantity} onChange={handleChange} className="border rounded p-2 w-full" />
-
+<input
+  type="number"
+  name="reorder_level"
+  placeholder="Set Low Stock Threshold (Reorder Level)"
+  value={form.reorder_level}
+  onChange={handleChange}
+  className="border rounded p-2 w-full"
+/>
         <select name="unitMeasure" value={form.unitMeasure} onChange={handleChange} className="border rounded p-2 w-full">
           <option value="">Select Unit of Measure</option>
           {unitOptions.map(unit => <option key={unit} value={unit}>{unit}</option>)}
@@ -219,7 +252,7 @@ const newItem = {
 >
   <option value="">Select Storage Location</option>
   <option value="Dry">Dry</option>
-  <option value="Refrigerated">Refrigerated</option>
+  <option value="Refer">Refer</option>
   <option value="Freezer">Freezer</option>
   <option value="Other">Other</option>
 </select>

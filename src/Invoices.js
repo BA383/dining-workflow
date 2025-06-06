@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import BackToAdminDashboard from './BackToAdminDashboard';
 
 
 function Invoices() {
@@ -42,6 +43,7 @@ function Invoices() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
+      <BackToAdminDashboard />
       <h1 className="text-2xl font-bold mb-6">Invoice Processing</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

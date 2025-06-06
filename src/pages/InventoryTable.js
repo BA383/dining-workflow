@@ -6,6 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 import QRCode from 'qrcode';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
+import BackToInventoryDashboard from '../Components/BackToInventoryDashboard';
 
 const ALL_UNITS = ['Discovery', 'Regattas', 'Commons', 'Palette', 'Einstein', 'Administration'];
 
@@ -204,6 +205,7 @@ console.log('Category in formatted upload:', formatted.map(f => f.category));
 
   return (
     <div className="p-6">
+      <BackToInventoryDashboard />
       <h2 className="text-xl font-bold mb-4">
         Master Inventory View — {user.role === 'admin' ? (selectedUnit === 'Administration' ? 'All Units' : selectedUnit) : user.unit}
       </h2>

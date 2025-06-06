@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-
+import BackToAdminDashboard from '../BackToAdminDashboard';
 import {
   PlusCircle,
   Table,
@@ -13,6 +13,7 @@ import {
 function InventoryDashboard() {
   return (
     <div className="p-6 max-w-6xl mx-auto">
+      <BackToAdminDashboard />
       <h1 className="text-3xl font-bold text-blue-900 mb-6">Inventory Dashboard</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

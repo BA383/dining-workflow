@@ -1,4 +1,5 @@
 import React from 'react';
+import BackToAdminDashboard from '../BackToAdminDashboard';
 
 function GeneralReport() {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -6,6 +7,7 @@ function GeneralReport() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      <BackToAdminDashboard />
       <h1 className="text-3xl font-bold mb-6 text-blue-900">General Operations Report</h1>
 
       {!isAdmin && (
