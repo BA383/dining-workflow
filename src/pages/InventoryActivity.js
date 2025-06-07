@@ -13,7 +13,7 @@ function InventoryActivity() {
 
   const units = ['Discovery', 'Regattas', 'Commons', 'Palette', 'Einstein'];
 
-  useEffect(() => {
+ useEffect(() => {
   const fetchLogs = async () => {
     let query = supabase
       .from('inventory_logs')

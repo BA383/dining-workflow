@@ -58,20 +58,19 @@ const handleQtyChange = (index, value) => {
 
     if (error) return alert('Update failed: ' + error.message);
 
-    const { error: logError } = await supabase.from('inventory_logs').insert([{
-      sku: item.sku,
-      name: item.name,
-      quantity: item.item.qty_on_hand
+const { error: logError } = await supabase.from('inventory_logs').insert([{
+  sku: item.sku,
+  name: item.name,
+  quantity: item.qty_on_hand || 0,  // Prevents crashing if qty is undefined
+  location: item.location || '',
+  category: item.category || '',
+  unit: item.unit || '',
+  action: 'edit',
+  dining_unit: item.dining_unit || user.unit,
+  email: user.email || '',
+  timestamp: new Date(),
+}]);
 
-,
-      location: item.location || '',
-      category: item.category || '',
-      unit: item.unit || '',
-      action: 'edit',
-      dining_unit: item.dining_unit || user.unit,
-      email: user.email || '',
-      timestamp: new Date(),
-    }]);
 
     if (logError) console.error('Log insert error:', logError.message);
 
@@ -80,72 +79,84 @@ const handleQtyChange = (index, value) => {
     fetchItems();
   };
 
-  const handleDelete = async (id) => {
-    const item = items.find(i => i.id === id);
-    await supabase.rpc('set_config', {
-      config_key: 'request.unit',
-      config_value: item.dining_unit || user.unit,
-    });
+const handleDelete = async (id) => {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
 
-    const { error } = await supabase.from('inventory').delete().eq('id', id);
-    if (error) return alert('Delete failed: ' + error.message);
-    
-await supabase.rpc('set_config', {
-  config_key: 'request.unit',
-  config_value: item.dining_unit || user.unit,
-});
+  // Set RLS unit
+  await supabase.rpc('set_config', {
+    config_key: 'request.unit',
+    config_value: item.dining_unit || user.unit,
+  });
 
-    await supabase.from('inventory_logs').insert([{
-      sku: item.sku,
-      name: item.name,
-      quantity: item.item.qty_on_hand
+  // Delete item
+  const { error } = await supabase.from('inventory').delete().eq('id', id);
+  if (error) return alert('Delete failed: ' + error.message);
 
-,
-      location: item.location || '',
-      category: item.category || '',
-      unit: item.unit || '',
-      action: 'delete',
-      dining_unit: item.dining_unit || user.unit,
-      email: user.email || '',
-      timestamp: new Date(),
-    }]);
+  // ✅ Log the deletion to inventory_logs
+  const { error: logError } = await supabase.from('inventory_logs').insert([{
+    sku: item.sku,
+    name: item.name,
+    quantity: item.qty_on_hand || 0,
+    location: item.location || '',
+    category: item.category || '',
+    unit: item.unit || '',
+    action: 'delete',
+    dining_unit: item.dining_unit || user.unit,
+    email: user.email || '',
+    timestamp: new Date(),
+  }]);
 
-    alert('Item deleted.');
-    fetchItems();
-  };
+  if (logError) console.error('Log insert error:', logError.message);
 
-  const handleBulkDelete = async () => {
-    const deletedItems = items.filter(item => selectedItems.includes(item.id));
-    if (deletedItems.length === 0) return;
+  alert('Item deleted.');
+  fetchItems(); // Refresh table
+};
 
-    await supabase.rpc('set_config', {
-      config_key: 'request.unit',
-      config_value: deletedItems[0].dining_unit || user.unit,
-    });
 
-    const { error } = await supabase.from('inventory').delete().in('id', selectedItems);
-    if (error) return alert('Bulk delete failed: ' + error.message);
+ const handleBulkDelete = async () => {
+  const deletedItems = items.filter(item => selectedItems.includes(item.id));
+  if (deletedItems.length === 0) return;
 
-    const logs = deletedItems.map(item => ({
-      sku: item.sku,
-      name: item.name,
-      quantity: item.item.qty_on_hand
+  const unitForConfig = deletedItems[0]?.dining_unit || user.unit;
 
-,
-      location: item.location || '',
-      category: item.category || '',
-      unit: item.unit || '',
-      action: 'bulk delete',
-      dining_unit: item.dining_unit || user.unit,
-      email: user.email || '',
-      timestamp: new Date(),
-    }));
+  await supabase.rpc('set_config', {
+    config_key: 'request.unit',
+    config_value: unitForConfig,
+  });
 
-    await supabase.from('inventory_logs').insert(logs);
-    alert('Selected items deleted.');
-    setSelectedItems([]);
-    fetchItems();
-  };
+  const { error } = await supabase.from('inventory')
+    .delete()
+    .in('id', selectedItems);
+
+  if (error) {
+    alert('Bulk delete failed: ' + error.message);
+    return;
+  }
+
+  // ✅ Log deleted items to inventory_logs
+  const logs = deletedItems.map(item => ({
+    sku: item.sku,
+    name: item.name,
+    quantity: item.qty_on_hand || 0,
+    location: item.location || '',
+    category: item.category || '',
+    unit: item.unit || '',
+    action: 'bulk delete',
+    dining_unit: item.dining_unit || user.unit,
+    email: user.email || '',
+    timestamp: new Date(),
+  }));
+
+  const { error: logError } = await supabase.from('inventory_logs').insert(logs);
+  if (logError) console.error('Logging bulk delete failed:', logError.message);
+
+  alert('Selected items deleted.');
+  setSelectedItems([]);
+  fetchItems();
+};
+
+
 
   const toggleSelect = (id) => {
     setSelectedItems(prev =>

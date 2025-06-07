@@ -12,20 +12,21 @@ import html2canvas from 'html2canvas';
 function InventoryForm() {
   const user = JSON.parse(localStorage.getItem('user'));
 
-  const [form, setForm] = useState({
+ const [form, setForm] = useState({
   barcode: '',
   dining_unit: user?.role === 'admin' ? 'Administration' : user?.unit || '',
   email: user?.email || '',
   itemName: '',
   category: '',
-  quantity: '',
-  unitPrice: '',
+  quantity: '',       // ✅ update to match DB column
+  unitPrice: '',        // ✅ update to match DB column
   unitMeasure: '',
   location: '',
   dateReceived: '',
   notes: '',
-  reorder_level: '', // ✅ Add this line
+  reorder_level: '',
 });
+
 
 const uploadQRCodeLabel = async (element, barcode) => {
   try {
@@ -109,7 +110,7 @@ const newItem = {
   name: form.itemName,
   category: form.category,
   unit: form.unitMeasure,
-  quantity: toNumber(form.quantity),
+  quantity: toNumber(form.qty_on_hand),
   unitPrice: toNumber(form.unitPrice),
   extendedPrice,
   location: form.location,
@@ -134,13 +135,14 @@ if (insertError) {
 setLastRegisteredItem({
   sku: form.barcode,
   name: form.itemName,
-  qty_on_hand: form.quantity, 
-  unit_price: form.unit_price,       // 👈 renamed here
+  qty_on_hand: parseInt(form.qty_on_hand, 10) || 0,
+  unitPrice: parseFloat(form.unitPrice) || 0,     // ✅ match table schema
   unit: form.unitMeasure,
   location: form.location,
-  diningUnit: form.dining_unit,
+  diningUnit: form.dining_unit,                   // ✅ match database field
   updated_at: new Date().toISOString()
 });
+
 
 await supabase.rpc('set_config', {
   config_key: 'request.unit',
@@ -150,7 +152,7 @@ await supabase.rpc('set_config', {
 await supabase.from('inventory_logs').insert([{
   sku: form.barcode,
   name: form.itemName,
-  qty_on_hand: form.quantity,
+  qty_on_hand: form.qty_on_hand,
   action: 'register',
   unit: form.unitMeasure,
   location: form.location,
@@ -252,7 +254,7 @@ const handlePrintLabel = async () => {
     
     className="border rounded p-2 w-full"
   >
-    <option value="">Select Dining Unit</option>
+    <option value="Administration">Select Dining Unit</option>
     <option value="Discovery">Discovery</option>
     <option value="Regattas">Regattas</option>
     <option value="Commons">Commons</option>

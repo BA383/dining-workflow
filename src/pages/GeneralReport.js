@@ -24,7 +24,8 @@ function GeneralReport() {
   const fetchAllInventoryInsights = async () => {
     const { data: inventoryData, error: inventoryError } = await supabase
       .from('inventory')
-      .select('sku, name, qty_on_hand, unit_price, reorder_level, dining_unit, updated_at');
+      .select('sku, name, qty_on_hand, unitPrice, reorder_level, dining_unit, updated_at');
+
 
     if (inventoryError) {
       console.error('Error fetching inventory:', inventoryError.message);
@@ -43,7 +44,7 @@ function GeneralReport() {
     // Total Value by Unit
     const unitTotals = {};
     inventoryData.forEach(item => {
-      const value = (Number(item.qty_on_hand) || 0) * (Number(item.unit_price) || 0);
+      const value = (Number(item.qty_on_hand) || 0) * (Number(item.unitPrice) || 0);
       if (!unitTotals[item.dining_unit]) unitTotals[item.dining_unit] = 0;
       unitTotals[item.dining_unit] += value;
     });

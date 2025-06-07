@@ -65,7 +65,7 @@ function InventoryTable() {
 
 
 
- const handleFileUpload = (e) => {
+const handleFileUpload = (e) => {
   const file = e.target.files[0];
   if (!file) return;
 
@@ -73,24 +73,62 @@ function InventoryTable() {
   reader.onload = async (event) => {
     let rows = [];
 
+    const parseAndUpload = (rawRows) => {
+  const normalized = rawRows.map(row => {
+    const cleaned = {};
+    for (const key in row) {
+      const normalizedKey = key.trim().toLowerCase().replace(/ /g, '_');
+      let value = row[key];
+
+      if (normalizedKey === 'unit_price') {
+        value = parseFloat(String(value).replace(/[$,]/g, '')) || 0;
+      }
+
+      if (normalizedKey === 'category') {
+        cleaned['category'] = String(value || '').trim();
+        continue;
+      }
+
+      if (['quantity', 'qty', 'qty_on_hand'].includes(normalizedKey)) {
+        cleaned['qty_on_hand'] = Number(value) || 0;
+        continue;
+      }
+
+      if (['item_name', 'name'].includes(normalizedKey)) {
+        cleaned['name'] = String(value || '').trim();
+        continue;
+      }
+
+      cleaned[normalizedKey] = value;
+    }
+
+    cleaned['dining_unit'] = cleaned['dining_unit'] || (user.role === 'admin' ? selectedUnit : user.unit);
+    cleaned['updated_at'] = new Date().toISOString();
+
+    return cleaned;
+  });
+
+  processUploadRows(normalized);
+};
+
+
+
     if (file.name.endsWith('.xlsx')) {
       const data = new Uint8Array(event.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       rows = XLSX.utils.sheet_to_json(sheet);
+      parseAndUpload(rows);
     } else {
       Papa.parse(event.target.result, {
         header: true,
         skipEmptyLines: true,
         complete: (results) => {
           rows = results.data;
-          processUploadRows(rows);
+          parseAndUpload(rows);
         },
       });
-      return;
     }
-
-    processUploadRows(rows);
   };
 
   if (file.name.endsWith('.xlsx')) {
@@ -100,41 +138,84 @@ function InventoryTable() {
   }
 };
 
+
 const processUploadRows = async (rows) => {
   const transformedRows = rows.map((row) => {
-    const qty = Number(row.qty_on_hand || row.qty || row.quantity || 0);
+  const qty = Number(row.qty_on_hand || row.qty || row.quantity || 0);
+  const unitPrice = Number(row.unit_price || 0);
+  const name = row.name || row.item_name; // ✅ "item_name" now maps from "Item Name"
 
-    return {
-      ...row,
-      qty_on_hand: qty,
-      updated_at: new Date().toISOString(),
-      dining_unit: user.role === 'admin' ? row.dining_unit?.trim() : user.unit,
-    };
-  });
+  return {
+    sku: row.sku,
+    name: name?.trim(), // Ensure it's not null
+    category: row.category || '',
+    unit: row.unit || '',
+    quantity: qty,
+    unitPrice: unitPrice,
+    extendedPrice: qty * unitPrice,
+    location: row.location || '',
+    reorder_level: Number(row.reorder_level || 0),
+    dining_unit: user.role === 'admin' ? row.dining_unit?.trim() || user.unit : user.unit,
+    qty_on_hand: qty,
+    updated_at: new Date().toISOString(),
+  };
+});
 
-  // Optional cleanup: remove conflicting fields
-  transformedRows.forEach((row) => delete row.quantity);
 
   const { error } = await supabase.from('inventory').insert(transformedRows);
   if (error) {
     console.error('❌ Upload error:', error.message);
-    alert('Error uploading inventory.');
+    alert('Error uploading inventory: ' + error.message);
   } else {
     alert('✅ Inventory uploaded successfully!');
-    fetchItems(); // Refresh inventory table
+    fetchItems(); // Refresh UI
   }
 };
 
 
+
+
+
 const uploadToSupabase = async (rows) => {
   // Normalize keys: trim spaces, lowercase
-  rows = rows.map(row => {
-    const normalized = {};
-    for (const key in row) {
-      normalized[key.trim().toLowerCase()] = row[key];
+ rows = rows.map(row => {
+  const normalized = {};
+  for (const key in row) {
+    const cleanKey = key.trim().toLowerCase();
+    switch (cleanKey) {
+      case 'item name':
+        normalized.name = row[key];
+        break;
+      case 'unit price':
+        normalized.unitPrice = parseFloat(String(row[key]).replace(/[$,]/g, '')) || 0;
+        break;
+      case 'quantity':
+      case 'qty':
+      case 'qty on hand':
+        normalized.qty_on_hand = Number(row[key]) || 0;
+        break;
+      case 'dining unit':
+        normalized.dining_unit = row[key];
+        break;
+      case 'reorder level':
+        normalized.reorder_level = Number(row[key]) || 0;
+        break;
+      case 'sku':
+      case 'category':
+      case 'unit':
+      case 'location':
+      case 'notes':
+        normalized[cleanKey.replace(/ /g, '_')] = row[key];
+        break;
+      default:
+        normalized[cleanKey.replace(/ /g, '_')] = row[key];
     }
-    return normalized;
-  });
+  }
+  normalized.updated_at = new Date().toISOString();
+  return normalized;
+});
+
+
 
   const formatted = rows.map(row => {
     const qty = Number(row.qty_on_hand || row.qty || row.quantity || 0);
@@ -311,11 +392,11 @@ const totalVal = filteredItems.reduce((sum, i) => sum + (i.qty_on_hand || 0) * (
                         <tr key={i}>
                           <td className="border p-2">{item.name}</td>
                           <td className="border p-2">{item.sku}</td>
-                          <td className="border p-2">{item.category}</td>
+                          <td className="border p-2">{item.category || '-'}</td>
                           <td className="border p-2">{item.qty_on_hand}</td>
                           <td className="border p-2">{item.dining_unit}</td>
                           <td className="border p-2">{item.location || '-'}</td>
-                          <td className="border p-2">${item.unitPrice?.toFixed(2)}</td>
+                          <td className="border p-2">${Number(item.unitPrice || 0).toFixed(2)}</td>
 <td className="border p-2 text-right">
   ${((item.qty_on_hand || 0) * (item.unitPrice || 0)).toFixed(2)}
 </td>
