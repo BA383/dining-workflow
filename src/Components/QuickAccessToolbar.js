@@ -24,7 +24,7 @@ function QuickAccessToolbar() {
         </Link>
         <Link to="/general-report" className="flex flex-col items-center text-xs text-blue-700 hover:text-blue-900">
           <BarChartIcon className="h-5 w-5" />
-          Director's Reports
+          Director's Snapshot 
         </Link>
         <Link to="/workflow-manual" className="flex flex-col items-center text-xs text-blue-700 hover:text-blue-900">
           <BookOpenIcon className="h-5 w-5" />

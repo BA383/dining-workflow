@@ -17,7 +17,7 @@ function Dashboard() {
           <p className="text-sm text-gray-600">Fill out and send a transmittal form.</p>
         </Link>
         <Link to="/general-report" className="bg-white p-4 border rounded shadow">
-          <h2 className="text-lg font-semibold text-blue-800 mb-2">📊 Director's Reports</h2>
+          <h2 className="text-lg font-semibold text-blue-800 mb-2">📊 Director's Snapshot</h2>
           <p className="text-sm text-gray-600">Insights and tracking.</p>
         </Link>
         <Link to="/tasks" className="bg-white p-4 border rounded shadow hover:shadow-md transition">

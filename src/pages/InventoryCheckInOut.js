@@ -13,75 +13,57 @@ function InventoryCheckInOut() {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'admin';
   const [selectedUnit, setSelectedUnit] = useState(user.unit || '');
+
   const fetchInventory = useCallback(async () => {
-  const query = supabase.from('inventory').select('*');
-
-  if (user.role !== 'admin') {
-  query.eq('dining_unit', user.unit);
-} else if (selectedUnit) {
-  query.eq('dining_unit', selectedUnit);
-}
-
-
-  const { data, error } = await query;
-  if (!error) setItems(data);
-  else console.error('Error fetching inventory:', error.message);
-}, [user.unit, user.role, selectedUnit]);
-
+    const query = supabase.from('inventory').select('*');
+    if (user.role !== 'admin') {
+      query.eq('dining_unit', user.unit);
+    } else if (selectedUnit) {
+      query.eq('dining_unit', selectedUnit);
+    }
+    const { data, error } = await query;
+    if (!error) setItems(data);
+    else console.error('Error fetching inventory:', error.message);
+  }, [user.unit, user.role, selectedUnit]);
 
   useEffect(() => {
     fetchInventory();
   }, [fetchInventory]);
 
   const handleScan = useCallback(async (barcode) => {
-const unitToQuery = (user.role === 'admin' ? selectedUnit : user.unit || '').trim();
+    const unitToQuery = (user.role === 'admin' ? selectedUnit : user.unit || '').trim();
+    const { data, error } = await supabase
+      .from('inventory')
+      .select('*')
+      .eq('sku', barcode)
+      .eq('dining_unit', unitToQuery);
 
-console.log('Looking up SKU:', barcode, 'for unit:', unitToQuery);
+    if (error || !data || data.length === 0) {
+      setFeedback('❌ Item not found or error occurred.');
+      return;
+    }
 
-const { data, error } = await supabase
-  .from('inventory')
-  .select('*')
-  .eq('sku', barcode)
-  .eq('dining_unit', unitToQuery);
+    if (data.length > 1) {
+      setFeedback('⚠️ This SKU is registered under multiple entries. Please ensure each SKU is uniquely assigned per unit.');
+      return;
+    }
 
-if (error) {
-  setFeedback('❌ Error fetching item.');
-  return;
-}
-
-if (!data || data.length === 0) {
-  setFeedback('❌ Item not found.');
-  return;
-}
-
-if (data.length > 1) {
-  setFeedback('⚠️ This SKU is registered under multiple entries. Please ensure each SKU is uniquely assigned per category.');
-  return;
-}
-
-const item = data[0]; // ✅ now safe to access
-setForm({ sku: barcode, name: item.name, quantity: 1 });
-setFeedback('');
-
-
+    const item = data[0];
+    setForm({ sku: barcode, name: item.name, quantity: 1 });
+    setFeedback('');
   }, [selectedUnit, user.unit]);
 
   useEffect(() => {
-  const fetchLog = async () => {
-    const query = supabase.from('inventory_logs').select('*').order('timestamp', { ascending: false }).limit(10);
-    if (user.role !== 'admin') {
-  query.eq('dining_unit', user.unit);
-}
-if (user.role === 'admin' && selectedUnit) {
-  query.eq('dining_unit', selectedUnit);
-}
+    const fetchLog = async () => {
+      const query = supabase.from('inventory_logs').select('*').order('timestamp', { ascending: false }).limit(10);
+      if (user.role !== 'admin') query.eq('dining_unit', user.unit);
+      if (user.role === 'admin' && selectedUnit) query.eq('dining_unit', selectedUnit);
 
-    const { data, error } = await query;
-    if (!error) setActivityLog(data);
-  };
-
-  fetchLog();
-}, [user.unit, user.role]);
+      const { data, error } = await query;
+      if (!error) setActivityLog(data);
+    };
+    fetchLog();
+  }, [user.unit, user.role]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -90,72 +72,58 @@ if (user.role === 'admin' && selectedUnit) {
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  const unitToQuery = (user.role === 'admin' ? selectedUnit : user.unit || '').trim();
+    e.preventDefault();
+    const unitToQuery = (user.role === 'admin' ? selectedUnit : user.unit || '').trim();
 
+    if (!unitToQuery || !form.sku || !form.quantity) return;
+    const delta = action === 'checkin' ? parseInt(form.quantity) : -parseInt(form.quantity);
 
-  if (!unitToQuery) {
-    alert('User unit not defined. Please log in again.');
-    return;
-  }
-  if (!form.sku || !form.quantity) return;
+    const { data: existingItem, error: fetchError } = await supabase
+      .from('inventory')
+      .select('qty_on_hand')
+      .eq('sku', form.sku)
+      .eq('dining_unit', unitToQuery)
+      .single();
 
-  const delta = action === 'checkin' ? parseInt(form.quantity) : -parseInt(form.quantity);
+    if (fetchError || !existingItem) {
+      alert('❌ Item not found or fetch failed.');
+      return;
+    }
 
-  const { data: existingItem, error: fetchError } = await supabase
-    .from('inventory')
-    .select('quantity')
-    .eq('sku', form.sku)
-    .eq('dining_unit', unitToQuery)
-    .single();
+    const newQty = (existingItem.qty_on_hand || 0) + delta;
 
-  if (fetchError || !existingItem) {
-    alert('❌ Item not found or fetch failed.');
-    return;
-  }
+    const { error: updateError } = await supabase
+      .from('inventory')
+      .update({
+        qty_on_hand: newQty,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('sku', form.sku)
+      .eq('dining_unit', unitToQuery);
 
-  const newQuantity = existingItem.quantity + delta;
+    if (updateError) {
+      console.error('Error updating qty_on_hand:', updateError.message);
+    }
 
-  const { error: updateError } = await supabase
-    .from('inventory')
-    .update({ quantity: newQuantity })
-    .eq('sku', form.sku)
-    .eq('dining_unit', unitToQuery);
+    await supabase.from('inventory_logs').insert([{
+      sku: form.sku,
+      name: form.name,
+      quantity: form.quantity,
+      action,
+      location: items.find(i => i.sku === form.sku)?.location || '',
+      dining_unit: unitToQuery,
+      email: user.email,
+      timestamp: new Date(),
+    }]);
 
-  if (updateError) {
-    alert('❌ Failed to update quantity: ' + updateError.message);
-    return;
-  }
-await supabase.rpc('set_config', {
-  config_key: 'request.unit',
-  config_value: unitToQuery,
-});
+    const updatedItems = items.map(item =>
+      item.sku === form.sku ? { ...item, qty_on_hand: newQty } : item
+    );
 
-  await supabase.from('inventory_logs').insert([{
-    sku: form.sku,
-    name: form.name,
-    quantity: form.quantity,
-    action,
-    location: items.find(i => i.sku === form.sku)?.location || '',
-    dining_unit: unitToQuery,
-    email: user.email,
-    timestamp: new Date(),
-  }]);
-
-  // 🔁 Reflect change in master table
-  const existingIndex = items.findIndex(item => item.sku === form.sku);
-  let updatedItems = [...items];
-
-  if (existingIndex !== -1) {
-    updatedItems[existingIndex].quantity = newQuantity;
-  } else {
-    updatedItems.push({ ...form, quantity: newQuantity });
-  }
-
-  setItems(updatedItems);
-  setForm({ sku: '', name: '', quantity: 0 });
-};
-
+    setItems(updatedItems);
+    setForm({ sku: '', name: '', quantity: 1 });
+    setFeedback('✅ Inventory updated.');
+  };
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -230,7 +198,7 @@ await supabase.rpc('set_config', {
       </form>
 
       {feedback && (
-        <div className={`mb-4 text-sm ${feedback.startsWith('Error') ? 'text-red-600' : 'text-green-600'}`}>
+        <div className={`mb-4 text-sm ${feedback.startsWith('❌') ? 'text-red-600' : 'text-green-600'}`}>
           {feedback}
         </div>
       )}
@@ -241,15 +209,15 @@ await supabase.rpc('set_config', {
           <tr>
             <th className="border p-2">SKU</th>
             <th className="border p-2">Item Name</th>
-            <th className="border p-2 text-right">Quantity</th>
+            <th className="border p-2 text-right">Qty on Hand</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item, i) => (
-            <tr key={i} className={item.quantity < 0 ? 'bg-red-100' : ''}>
+            <tr key={i} className={item.qty_on_hand < 0 ? 'bg-red-100' : ''}>
               <td className="border p-2">{item.sku}</td>
               <td className="border p-2">{item.name}</td>
-              <td className="border p-2 text-right">{item.quantity}</td>
+              <td className="border p-2 text-right">{item.qty_on_hand}</td>
             </tr>
           ))}
         </tbody>

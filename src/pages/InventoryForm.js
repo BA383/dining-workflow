@@ -3,6 +3,10 @@ import ScannerComponent from '../Components/ScannerComponent';
 import { supabase } from '../supabaseClient';
 import QRCode from 'qrcode';
 import BackToInventoryDashboard from '../Components/BackToInventoryDashboard';
+import QRCodeLabel from '../Components/QRCodeLabel';
+import html2canvas from 'html2canvas';
+
+
 
 
 function InventoryForm() {
@@ -23,6 +27,34 @@ function InventoryForm() {
   reorder_level: '', // ✅ Add this line
 });
 
+const uploadQRCodeLabel = async (element, barcode) => {
+  try {
+    const canvas = await html2canvas(element);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+
+    const fileName = `labels/${barcode}_${Date.now()}.png`;
+    const { data, error } = await supabase.storage
+      .from('qr_labels')
+      .upload(fileName, blob, {
+        contentType: 'image/png',
+        upsert: true
+      });
+
+    if (error) {
+      console.error('❌ QR Label upload failed:', error.message);
+      return null;
+    }
+
+    console.log('✅ QR Label uploaded to:', data.path);
+    return data.path;
+  } catch (err) {
+    console.error('❌ Error capturing QR label:', err);
+    return null;
+  }
+};
+const labelRef = React.useRef();
+
+const [lastRegisteredItem, setLastRegisteredItem] = useState(null);
 
   const unitOptions = ['ea', 'case', 'lbs', 'gallons', 'box', 'can', 'pack', 'tray'];
   const categoryOptions = [
@@ -94,11 +126,22 @@ const newItem = {
 
    const { error: insertError } = await supabase.from('inventory').insert([newItem]);
 
+if (insertError) {
+  alert('❌ Error submitting: ' + insertError.message);
+  return;
+}
 
-    if (error) {
-      alert('❌ Error submitting: ' + error.message);
-      return;
-    }
+setLastRegisteredItem({
+  sku: form.barcode,
+  name: form.itemName,
+  qty_on_hand: form.quantity, 
+  unit_price: form.unit_price,       // 👈 renamed here
+  unit: form.unitMeasure,
+  location: form.location,
+  diningUnit: form.dining_unit,
+  updated_at: new Date().toISOString()
+});
+
 await supabase.rpc('set_config', {
   config_key: 'request.unit',
   config_value: form.dining_unit,
@@ -107,19 +150,23 @@ await supabase.rpc('set_config', {
 await supabase.from('inventory_logs').insert([{
   sku: form.barcode,
   name: form.itemName,
-  quantity: form.quantity,
+  qty_on_hand: form.quantity,
   action: 'register',
-  unit: form.unitMeasure,           // ✅ this means unit of measure
-  location: form.location,          // ✅ include this
-  dining_unit: form.dining_unit,    // ✅ correct field!
+  unit: form.unitMeasure,
+  location: form.location,
+  dining_unit: form.dining_unit,
   email: form.email,
   timestamp: new Date(),
 }]);
 
+// ✅ Upload the QR label snapshot to Supabase
+const labelPath = await uploadQRCodeLabel(labelRef.current, form.barcode);
+console.log("QR Label uploaded to:", labelPath);
 
-    await generateAndDownloadQRCode(form.barcode);
+// ✅ You can optionally store labelPath in the inventory table if needed
 
-    alert('✅ New inventory item registered.');
+alert('✅ New inventory item registered.');
+
 
     setForm({
       barcode: '',
@@ -156,6 +203,24 @@ await supabase.from('inventory_logs').insert([{
     setForm(prev => ({ ...prev, barcode }));
     console.log('📸 Barcode scanned in Register Form:', barcode);
   }, []);
+
+  const handleDownloadLabel = async () => {
+  if (!labelRef.current) return;
+  const canvas = await html2canvas(labelRef.current);
+  const link = document.createElement('a');
+  link.download = `${form.barcode}_label.png`;
+  link.href = canvas.toDataURL();
+  link.click();
+};
+
+const handlePrintLabel = async () => {
+  if (!labelRef.current) return;
+  const canvas = await html2canvas(labelRef.current);
+  const imgData = canvas.toDataURL();
+  const win = window.open('', '_blank');
+  win.document.write(`<img src="${imgData}" onload="window.print();window.close()" />`);
+  win.document.close();
+};
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -264,6 +329,37 @@ await supabase.from('inventory_logs').insert([{
           Submit
         </button>
       </form>
+
+     {lastRegisteredItem && (
+  <div className="mt-6 border-t pt-4">
+    <h3 className="text-lg font-semibold text-gray-700 mb-2">QR Code Label</h3>
+    <QRCodeLabel
+  ref={labelRef}
+  sku={lastRegisteredItem.sku}
+  name={lastRegisteredItem.name}
+  unit={lastRegisteredItem.unit}
+  location={lastRegisteredItem.location}
+  diningUnit={lastRegisteredItem.diningUnit}
+/>
+
+    <div className="mt-4 flex gap-4">
+      <button
+        onClick={handleDownloadLabel}
+        className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+      >
+        Download Label
+      </button>
+      <button
+        onClick={handlePrintLabel}
+        className="bg-gray-600 text-white px-3 py-1 rounded hover:bg-gray-700"
+      >
+        Print Label
+      </button>
+    </div>
+  </div>
+)}
+
+
     </div>
   );
 }

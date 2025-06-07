@@ -89,25 +89,24 @@ if (isAdmin && unitFilter) query = query.eq('dining_unit', unitFilter);
     setTrendData(trendArray);
   };
 
-  const buildCategoryData = (data) => {
-    const catTotals = {};
-    data.forEach(item => {
-      catTotals[item.category] = (catTotals[item.category] || 0) + Number(item.quantity);
-    });
-    const formatted = Object.entries(catTotals).map(([category, quantity]) => ({ name: category, value: quantity }));
-    setCategoryData(formatted);
-  };
+ const buildCategoryData = (data) => {
+  const catTotals = {};
+  data.forEach(item => {
+    catTotals[item.category] = (catTotals[item.category] || 0) + Number(item.qty_on_hand);
+  });
+  const formatted = Object.entries(catTotals).map(([category, quantity]) => ({ name: category, value: quantity }));
+  setCategoryData(formatted);
+};
 
-  const totalQuantity = inventory.reduce((sum, item) => sum + Number(item.quantity), 0);
-  
-  const lowStockCount = inventory.filter(item =>
-  item.reorder_level && item.quantity < item.reorder_level
+const totalQuantity = inventory.reduce((sum, item) => sum + Number(item.qty_on_hand), 0);
+
+const lowStockCount = inventory.filter(item =>
+  item.reorder_level && item.qty_on_hand < item.reorder_level
 ).length;
 
-
-  const totalValue = inventory.reduce((sum, item) => {
+const totalValue = inventory.reduce((sum, item) => {
   const price = parseFloat(item.unitPrice) || 0;
-  const qty = parseFloat(item.quantity) || 0;
+  const qty = parseFloat(item.qty_on_hand) || 0;
   return sum + price * qty;
 }, 0);
 
@@ -204,7 +203,7 @@ if (isAdmin && unitFilter) query = query.eq('dining_unit', unitFilter);
       <td className="border p-2">{item.name}</td>
       <td className="border p-2">{item.sku}</td>
       <td className="border p-2">{item.category}</td>
-      <td className="border p-2">{item.quantity}</td>
+      <td className="border p-2">{item.qty_on_hand}</td>
       <td className="border p-2">{item.dining_unit}</td>
       <td className="border p-2">{item.location}</td>
     </tr>

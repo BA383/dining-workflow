@@ -17,6 +17,13 @@ function InventoryAdminTable() {
   const [editingItemId, setEditingItemId] = useState(null);
   const [selectedItems, setSelectedItems] = useState([]);
 
+const handleQtyChange = (index, value) => {
+  const updatedItems = [...items];
+  updatedItems[index].qty_on_hand = Number(value);
+  setItems(updatedItems);
+};
+
+
   const UNIT_OPTIONS = ['Commons', 'Regattas', 'Discovery', 'Palette', 'Einstein'];
   const CATEGORY_OPTIONS = [
     'BAKED GOODS', 'BEVERAGES', 'FRESH BREAD', 'DAIRY PRODUCTS', 'DELI MEATS', 'SEAFOOD',
@@ -54,7 +61,9 @@ function InventoryAdminTable() {
     const { error: logError } = await supabase.from('inventory_logs').insert([{
       sku: item.sku,
       name: item.name,
-      quantity: item.quantity,
+      quantity: item.item.qty_on_hand
+
+,
       location: item.location || '',
       category: item.category || '',
       unit: item.unit || '',
@@ -89,7 +98,9 @@ await supabase.rpc('set_config', {
     await supabase.from('inventory_logs').insert([{
       sku: item.sku,
       name: item.name,
-      quantity: item.quantity,
+      quantity: item.item.qty_on_hand
+
+,
       location: item.location || '',
       category: item.category || '',
       unit: item.unit || '',
@@ -118,7 +129,9 @@ await supabase.rpc('set_config', {
     const logs = deletedItems.map(item => ({
       sku: item.sku,
       name: item.name,
-      quantity: item.quantity,
+      quantity: item.item.qty_on_hand
+
+,
       location: item.location || '',
       category: item.category || '',
       unit: item.unit || '',
@@ -170,8 +183,9 @@ await supabase.rpc('set_config', {
           </tr>
         </thead>
         <tbody>
-          {items.map(item => (
-            <tr key={item.id}>
+          {items.map((item, i) => (
+  <tr key={item.id}>
+
               <td className="border p-2 text-center">
                 <input
                   type="checkbox"
@@ -205,13 +219,14 @@ await supabase.rpc('set_config', {
                 </select>
               </td>
               <td className="border p-2">
-                <input
-                  type="number"
-                  value={item.quantity || 0}
-                  onChange={(e) => handleChange(item.id, 'quantity', e.target.value)}
-                  className="w-full"
-                />
-              </td>
+  <input
+    type="number"
+    value={item.qty_on_hand || 0 }
+    onChange={(e) => handleQtyChange(i, e.target.value)}
+    className="w-full text-right"
+  />
+</td>
+
               <td className="border p-2">
                 <select
                   value={item.dining_unit || ''}

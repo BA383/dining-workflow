@@ -65,40 +65,66 @@ function InventoryTable() {
 
 
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+ const handleFileUpload = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      let rows = [];
-
-      if (file.name.endsWith('.xlsx')) {
-        const data = new Uint8Array(event.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        rows = XLSX.utils.sheet_to_json(sheet);
-      } else {
-        Papa.parse(file, {
-          header: true,
-          skipEmptyLines: true,
-          complete: async (results) => {
-            rows = results.data;
-            await uploadToSupabase(rows);
-          },
-        });
-        return;
-      }
-
-      await uploadToSupabase(rows);
-    };
+  const reader = new FileReader();
+  reader.onload = async (event) => {
+    let rows = [];
 
     if (file.name.endsWith('.xlsx')) {
-      reader.readAsArrayBuffer(file);
+      const data = new Uint8Array(event.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(sheet);
     } else {
-      reader.readAsText(file);
+      Papa.parse(event.target.result, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          rows = results.data;
+          processUploadRows(rows);
+        },
+      });
+      return;
     }
+
+    processUploadRows(rows);
   };
+
+  if (file.name.endsWith('.xlsx')) {
+    reader.readAsArrayBuffer(file);
+  } else {
+    reader.readAsText(file);
+  }
+};
+
+const processUploadRows = async (rows) => {
+  const transformedRows = rows.map((row) => {
+    const qty = Number(row.qty_on_hand || row.qty || row.quantity || 0);
+
+    return {
+      ...row,
+      qty_on_hand: qty,
+      updated_at: new Date().toISOString(),
+      dining_unit: user.role === 'admin' ? row.dining_unit?.trim() : user.unit,
+    };
+  });
+
+  // Optional cleanup: remove conflicting fields
+  transformedRows.forEach((row) => delete row.quantity);
+
+  const { error } = await supabase.from('inventory').insert(transformedRows);
+  if (error) {
+    console.error('❌ Upload error:', error.message);
+    alert('Error uploading inventory.');
+  } else {
+    alert('✅ Inventory uploaded successfully!');
+    fetchItems(); // Refresh inventory table
+  }
+};
+
 
 const uploadToSupabase = async (rows) => {
   // Normalize keys: trim spaces, lowercase
@@ -111,7 +137,7 @@ const uploadToSupabase = async (rows) => {
   });
 
   const formatted = rows.map(row => {
-    const quantity = Number(row['qty'] || row['quantity'] || 0);
+    const qty = Number(row.qty_on_hand || row.qty || row.quantity || 0);
     const unitPrice = Number(String(row['unit price'] || 0).replace(/[$,]/g, ''));
     const reorder_level = Number(row['reorder level'] || 0);
 
@@ -119,11 +145,9 @@ const uploadToSupabase = async (rows) => {
       name: row['item name'] || row.name || '',
       sku: row['sku'] || '',
       category: row['category'] || '',
-
-
       quantity,
       unitPrice,
-      extendedPrice: quantity * unitPrice,
+      extendedPrice: qty * unitPrice,
       expiration: row['expiration'] ? new Date(row['expiration']).toISOString().split('T')[0] : null,
       date_received: row['date received'] ? new Date(row['date received']).toISOString().split('T')[0] : null,
       reorder_level,
@@ -185,23 +209,28 @@ console.log('Category in formatted upload:', formatted.map(f => f.category));
   };
 
   const renderChart = (data) => {
-    const categoryTotals = data.reduce((acc, item) => {
-      acc[item.category] = (acc[item.category] || 0) + Number(item.quantity);
-      return acc;
-    }, {});
-    const chartData = Object.entries(categoryTotals).map(([category, quantity]) => ({ category, quantity }));
+  const categoryTotals = data.reduce((acc, item) => {
+    acc[item.category] = (acc[item.category] || 0) + Number(item.qty_on_hand);
+    return acc;
+  }, {});
 
-    return (
-      <ResponsiveContainer width="100%" height={200}>
-        <BarChart data={chartData}>
-          <XAxis dataKey="category" />
-          <YAxis />
-          <Tooltip />
-          <Bar dataKey="quantity" fill="#60a5fa" />
-        </BarChart>
-      </ResponsiveContainer>
-    );
-  };
+  const chartData = Object.entries(categoryTotals).map(([category, qty_on_hand]) => ({
+    category,
+    qty_on_hand
+  }));
+
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <BarChart data={chartData}>
+        <XAxis dataKey="category" />
+        <YAxis />
+        <Tooltip />
+        <Bar dataKey="qty_on_hand" fill="#60a5fa" />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+};
+
 
   return (
     <div className="p-6">
@@ -250,8 +279,9 @@ console.log('Category in formatted upload:', formatted.map(f => f.category));
             item.category?.toLowerCase().includes(searchQuery.toLowerCase())
           );
 
-          const totalQty = filteredItems.reduce((sum, i) => sum + (i.quantity || 0), 0);
-          const totalVal = filteredItems.reduce((sum, i) => sum + (i.quantity || 0) * (i.unitPrice || 0), 0);
+          const totalQty = filteredItems.reduce((sum, i) => sum + (i.qty_on_hand || 0), 0);
+const totalVal = filteredItems.reduce((sum, i) => sum + (i.qty_on_hand || 0) * (i.unitPrice || 0), 0);
+
 
           return (
             <div key={unit} className="mb-6">
@@ -282,13 +312,14 @@ console.log('Category in formatted upload:', formatted.map(f => f.category));
                           <td className="border p-2">{item.name}</td>
                           <td className="border p-2">{item.sku}</td>
                           <td className="border p-2">{item.category}</td>
-                          <td className="border p-2">{item.quantity}</td>
+                          <td className="border p-2">{item.qty_on_hand}</td>
                           <td className="border p-2">{item.dining_unit}</td>
                           <td className="border p-2">{item.location || '-'}</td>
                           <td className="border p-2">${item.unitPrice?.toFixed(2)}</td>
 <td className="border p-2 text-right">
-  ${((item.quantity || 0) * (item.unitPrice || 0)).toFixed(2)}
+  ${((item.qty_on_hand || 0) * (item.unitPrice || 0)).toFixed(2)}
 </td>
+
 
                         </tr>
                       ))}
@@ -327,12 +358,12 @@ console.log('Category in formatted upload:', formatted.map(f => f.category));
         <td className="border p-2">{item.name}</td>
         <td className="border p-2">{item.sku}</td>
         <td className="border p-2">{item.category}</td>
-        <td className="border p-2">{item.quantity}</td>
+        <td className="border p-2">{item.qty_on_hand}</td>
         <td className="border p-2">{item.dining_unit}</td>
         <td className="border p-2">{item.location || '-'}</td> {/* ✅ Add this */}
         <td className="border p-2">${item.unitPrice?.toFixed(2)}</td>
         <td className="border p-2 text-right">
-        ${((item.quantity || 0) * (item.unitPrice || 0)).toFixed(2)}
+        ${((item.qty_on_hand || 0) * (item.unitPrice || 0)).toFixed(2)}
         </td>
       </tr>
     ))}
