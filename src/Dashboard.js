@@ -1,7 +1,24 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { isAdmin, isDining, hasGroupAccess } from './utils/permissions';
+
+
+
+
 
 function Dashboard() {
+  // ✅ Check permissions immediately
+  if (!isAdmin() && !isDining()) {
+  return (
+    <div className="p-6">
+      <p className="text-red-600 font-semibold text-lg">
+        🚫 Access Denied: Only Admins and Dining staff can access this page.
+      </p>
+    </div>
+  );
+}
+
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <h1 className="text-3xl font-bold mb-6 text-blue-900">Dining Workflow ~ Knotted Together for Excellence</h1>

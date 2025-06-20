@@ -27,10 +27,11 @@ function Tasks() {
           <p className="text-sm text-gray-600">Record a one-time or recurring dining entry.</p>
         </Link>
 
-        <Link to="/inventory-dashboard" className="bg-white border p-4 rounded shadow hover:shadow-md transition">
-          <h2 className="text-lg font-semibold text-blue-800 mb-2">📦 Run EOM Inventory</h2>
-          <p className="text-sm text-gray-600">Track, scan, and update inventory items.</p>
-        </Link>
+        <Link to="/run-eom-inventory" className="bg-white border p-4 rounded shadow hover:shadow-md transition">
+  <h2 className="text-lg font-semibold text-blue-800 mb-2">📦 Run EOM Inventory</h2>
+  <p className="text-sm text-gray-600">Generate plate cost from monthly activity logs.</p>
+</Link>
+
       </div>
     </div>
   );

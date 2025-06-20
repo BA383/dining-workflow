@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { supabase } from '../supabaseClient';
@@ -7,86 +7,205 @@ import QRCode from 'qrcode';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import BackToInventoryDashboard from '../Components/BackToInventoryDashboard';
+import { isAdmin, isDining } from '../utils/permissions'; // adjust path as needed
+import { getCurrentUser } from '../utils/userSession';
+import QRCodeLabel from '../Components/QRCodeLabel';
+
+
+
+
+
+
+const uploadQRCodeToStorage = async (sku, dataUrl) => {
+  try {
+    const fileName = `labels/${sku}_${Date.now()}.png`;
+    const fileBlob = await (await fetch(dataUrl)).blob();
+
+    const {
+  data: { session },
+  error: sessionError,
+} = await supabase.auth.getSession();
+
+if (sessionError || !session) {
+  console.error('❌ No valid Supabase session found');
+  return null;
+}
+
+console.log('🔐 Supabase session:', session); // ✅ Log session info
+
+
+    const { data, error } = await supabase.storage
+      .from('qrlabels')
+      .upload(fileName, fileBlob, {
+        contentType: 'image/png',
+        upsert: true,
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+    if (error) {
+      console.error(`❌ QR upload failed for SKU: ${sku}`, error.message);
+      return null;
+    }
+
+    console.log(`✅ QR uploaded: ${data.path}`);
+    return data.path;
+  } catch (err) {
+    console.error(`🔥 Unexpected QR upload failure for ${sku}:`, err);
+    return null;
+  }
+};
 
 const ALL_UNITS = ['Discovery', 'Regattas', 'Commons', 'Palette', 'Einstein', 'Administration'];
 
 function InventoryTable() {
-  const [user, setUser] = useState({});
+  const [user, setUser] = useState(null);
   const [selectedUnit, setSelectedUnit] = useState('');
   const [items, setItems] = useState([]);
   const [groupedItems, setGroupedItems] = useState({});
   const [collapsedUnits, setCollapsedUnits] = useState({});
+  const [lastUploadedItems, setLastUploadedItems] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const qrSectionRef = useRef(null);
 
-  useEffect(() => {
-    const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-    setUser(storedUser);
-    setSelectedUnit(storedUser.unit || '');
-  }, []);
-
-  useEffect(() => {
-    if (selectedUnit && user?.role) {
-      fetchItems();
-    }
-  }, [selectedUnit, user]);
-
-  const fetchItems = async () => {
-  // ✅ Set request.unit for RLS policies
- await supabase.rpc('set_config', {
-  config_key: 'request.unit',
-  config_value: user.role === 'admin' ? selectedUnit : user.unit,
-});
+  // 👍 useEffect and other logic follow here
 
 
-  // Now fetch data
+const fetchItems = async (user) => {
+  if (!user || !user?.role || !user?.unit) {
+    console.warn('❗ fetchItems aborted: missing user info');
+    return;
+  }
+
   let query = supabase.from('inventory').select('*');
-  if (!(user.role === 'admin' && selectedUnit === 'Administration')) {
-    const unitToFetch = user.role === 'admin' ? selectedUnit : user.unit;
-    query = query.eq('dining_unit', unitToFetch);
+
+  if (user?.role === 'admin' && selectedUnit !== 'Administration') {
+    query = query.eq('dining_unit', selectedUnit);
+  } else if (user?.role === 'dining') {
+    query = query.eq('dining_unit', user?.unit);
   }
 
   const { data, error } = await query;
-  if (error) {
-    console.error('Error fetching inventory:', error.message);
-  } else {
-    setItems(data);
 
-    if (selectedUnit === 'Administration') {
-      const grouped = data.reduce((acc, item) => {
-        acc[item.dining_unit] = acc[item.dining_unit] || [];
-        acc[item.dining_unit].push(item);
-        return acc;
-      }, {});
-      setGroupedItems(grouped);
-      setCollapsedUnits(Object.fromEntries(Object.keys(grouped).map(unit => [unit, true])));
+  if (error) {
+    console.error('❌ Error fetching inventory:', error.message);
+    return;
+  }
+
+  setItems(data);
+
+  if (user?.role === 'admin' && selectedUnit === 'Administration') {
+    const grouped = data.reduce((acc, item) => {
+      acc[item.dining_unit] = acc[item.dining_unit] || [];
+      acc[item.dining_unit].push(item);
+      return acc;
+    }, {});
+
+    setGroupedItems(grouped);
+    setCollapsedUnits(
+      Object.fromEntries(Object.keys(grouped).map(unit => [unit, true]))
+    );
+  }
+};
+
+// ✅ NOW SAFE: fetchItems is declared before this
+useEffect(() => {
+  const init = async () => {
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser || !currentUser?.unit || !currentUser?.role) {
+      console.warn('❗ Missing user, unit, or role');
+      return;
     }
+
+    setUser(currentUser);
+    setSelectedUnit(currentUser?.unit);
+
+    const [{ error: unitError }, { error: roleError }] = await Promise.all([
+      supabase.rpc('set_config', {
+        config_key: 'request.unit',
+        config_value: currentUser?.unit,
+        is_local: false
+      }),
+      supabase.rpc('set_config', {
+        config_key: 'request.role',
+        config_value: currentUser?.role,
+        is_local: false
+      })
+    ]);
+
+    if (unitError) console.error('❌ set_config request.unit failed:', unitError.message);
+    if (roleError) console.error('❌ set_config request.role failed:', roleError.message);
+
+    fetchItems(currentUser);
+  };
+
+
+  init();
+}, []);
+
+
+if (!user) {
+return <p className="p-4 text-red-600">Loading user data...</p>;
+//}
+
+useEffect(() => {
+  // ✅ Only fetch when user is available and selectedUnit is set
+  if (user && selectedUnit) {
+    fetchItems(user);
+  }
+}, [user, selectedUnit]); // ✅ Include user in the dependency array
+
+
+  let query = supabase.from('inventory').select('*');
+
+  if (user?.role === 'admin' && selectedUnit !== 'Administration') {
+    query = query.eq('dining_unit', selectedUnit);
+  } else if (user?.role === 'dining') {
+    query = query.eq('dining_unit', user?.unit);
+  }
+
+ 
+  if (error) {
+    console.error('❌ Error fetching inventory:', error.message);
+    return;
+  }
+
+
+  setItems(data);
+
+  if (user?.role === 'admin' && selectedUnit === 'Administration') {
+    const grouped = data.reduce((acc, item) => {
+      acc[item.dining_unit] = acc[item.dining_unit] || [];
+      acc[item.dining_unit].push(item);
+      return acc;
+    }, {});
+
+    setGroupedItems(grouped);
+    setCollapsedUnits(
+      Object.fromEntries(Object.keys(grouped).map(unit => [unit, true]))
+    );
   }
 };
 
 
 
-const handleFileUpload = (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = async (event) => {
-    let rows = [];
-
-    const parseAndUpload = (rawRows) => {
-  const normalized = rawRows.map(row => {
+// ✅ Define here — clean, top-level
+const parseAndUpload = (rawRows, user) => {
+  const normalized = rawRows.map((row) => {
     const cleaned = {};
     for (const key in row) {
       const normalizedKey = key.trim().toLowerCase().replace(/ /g, '_');
       let value = row[key];
 
-      if (normalizedKey === 'unit_price') {
-        value = parseFloat(String(value).replace(/[$,]/g, '')) || 0;
+      if (['sku'].includes(normalizedKey)) {
+        cleaned['sku'] = String(value || '').trim();
+        continue;
       }
 
-      if (normalizedKey === 'category') {
-        cleaned['category'] = String(value || '').trim();
-        continue;
+      if (normalizedKey === 'unit_price') {
+        value = parseFloat(String(value).replace(/[$,]/g, '')) || 0;
       }
 
       if (['quantity', 'qty', 'qty_on_hand'].includes(normalizedKey)) {
@@ -102,79 +221,164 @@ const handleFileUpload = (e) => {
       cleaned[normalizedKey] = value;
     }
 
-    cleaned['dining_unit'] = cleaned['dining_unit'] || (user.role === 'admin' ? selectedUnit : user.unit);
+    cleaned['dining_unit'] =
+      cleaned['dining_unit'] || (user?.role === 'admin' ? selectedUnit : user?.unit);
     cleaned['updated_at'] = new Date().toISOString();
 
     return cleaned;
   });
 
-  processUploadRows(normalized);
+  processUploadRows(normalized, user);
 };
 
 
+const handleFileUpload = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
 
-    if (file.name.endsWith('.xlsx')) {
-      const data = new Uint8Array(event.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      rows = XLSX.utils.sheet_to_json(sheet);
-      parseAndUpload(rows);
-    } else {
-      Papa.parse(event.target.result, {
+  const reader = new FileReader();
+  reader.onload = async (event) => {
+    if (!user) {
+      console.warn('❗ Cannot process upload — user not loaded');
+      return;
+    }
+
+    let rows = [];
+
+    // ✅ Correctly calling with user
+    if (file.name.endsWith('.csv')) {
+      Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
         complete: (results) => {
           rows = results.data;
-          parseAndUpload(rows);
-        },
+          parseAndUpload(rows, user); // ✅ FIXED HERE
+        }
       });
+    } else if (file.name.endsWith('.xlsx')) {
+      const workbook = XLSX.read(event.target.result, { type: 'binary' });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      rows = XLSX.utils.sheet_to_json(sheet);
+      parseAndUpload(rows, user); // ✅ FIXED HERE
+    } else {
+      console.error('❌ Unsupported file type');
     }
   };
 
   if (file.name.endsWith('.xlsx')) {
-    reader.readAsArrayBuffer(file);
+    reader.readAsBinaryString(file);
   } else {
     reader.readAsText(file);
   }
 };
 
-
-const processUploadRows = async (rows) => {
+const processUploadRows = async (rows, user) => {
   const transformedRows = rows.map((row) => {
-  const qty = Number(row.qty_on_hand || row.qty || row.quantity || 0);
-  const unitPrice = Number(row.unit_price || 0);
-  const name = row.name || row.item_name; // ✅ "item_name" now maps from "Item Name"
+    const rawSku = row.sku || row.SKU || '';
+    const qty = Number(row.qty_on_hand || row.qty || row.quantity || 0);
+    const unitPrice = parseFloat(String(row.unit_price || '').replace(/[$,]/g, '')) || 0;
+    const name = row.name || row.item_name;
 
-  return {
-    sku: row.sku,
-    name: name?.trim(), // Ensure it's not null
-    category: row.category || '',
-    unit: row.unit || '',
-    quantity: qty,
-    unitPrice: unitPrice,
-    extendedPrice: qty * unitPrice,
-    location: row.location || '',
-    reorder_level: Number(row.reorder_level || 0),
-    dining_unit: user.role === 'admin' ? row.dining_unit?.trim() || user.unit : user.unit,
-    qty_on_hand: qty,
-    updated_at: new Date().toISOString(),
-  };
-});
+    return {
+      sku: typeof rawSku === 'string' ? rawSku.trim() : '',
+      name: name?.trim(),
+      category: row.category || '',
+      unit: row.unit || '',
+      quantity: qty,
+      unitPrice: unitPrice,
+      extendedPrice: qty * unitPrice,
+      location: row.location || '',
+      reorder_level: Number(row.reorder_level || 0),
+      notes: row.notes || '',
+      dining_unit: user?.role === 'admin' ? row.dining_unit?.trim() || user?.unit : user?.unit,
+      qty_on_hand: qty,
+      updated_at: new Date().toISOString(),
+      user_email: user.email || '',
+    };
+  });
 
-
+  // ✅ Upload to Supabase inventory
   const { error } = await supabase.from('inventory').insert(transformedRows);
+
   if (error) {
     console.error('❌ Upload error:', error.message);
     alert('Error uploading inventory: ' + error.message);
+    return;
   } else {
     alert('✅ Inventory uploaded successfully!');
-    fetchItems(); // Refresh UI
+    fetchItems(user);
+    setLastUploadedItems(transformedRows);
+    setTimeout(() => {
+      qrSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 300);
   }
+
+  console.log('🟢 Starting QR generation for:', transformedRows.map(r => r.sku));
+
+  const zip = new JSZip();
+
+  await Promise.all(
+    transformedRows.map(async (item) => {
+      if (!item.sku || typeof item.sku !== 'string' || item.sku.trim() === '') {
+        console.warn(`⚠️ Skipping item due to missing SKU`, item);
+        return;
+      }
+
+      try {
+        const qrDataUrl = await QRCode.toDataURL(item.sku);
+
+        // ✅ Upload QR to Supabase Storage
+        const qrPath = await uploadQRCodeToStorage(item.sku, qrDataUrl);
+
+        if (qrPath) {
+          const { error: updateError } = await supabase.from('inventory')
+            .update({ qr_path: qrPath })
+            .eq('sku', item.sku)
+            .eq('dining_unit', item.dining_unit);
+
+          if (updateError) {
+            console.error(`❌ Failed to update qr_path for ${item.sku}:`, updateError.message);
+          } else {
+            console.log(`✅ qr_path saved for ${item.sku}`);
+          }
+        } else {
+          console.warn(`⚠️ No qrPath returned for ${item.sku}`);
+        }
+
+        // ✅ Add QR to ZIP
+        const base64 = qrDataUrl.split(',')[1];
+        zip.file(`${item.sku}.png`, base64, { base64: true });
+
+      } catch (err) {
+        console.error(`❌ QR generation/upload failed for ${item.sku}`, err);
+      }
+    })
+  );
+
+  // ✅ Trigger ZIP download
+  const zipBlob = await zip.generateAsync({ type: 'blob' });
+  saveAs(zipBlob, 'Inventory_QRCodes.zip');
+
+  // ✅ Upload to inventory_logs
+  const logs = transformedRows.map(item => ({
+    sku: item.sku,
+    name: item.name,
+    quantity: Math.round(Number(item.qty_on_hand) || 0),
+    action: 'upload',
+    location: item.location || '',
+    dining_unit: item.dining_unit,
+    email: user.email || '',
+    notes: item.notes || '',
+    timestamp: new Date(),
+  }));
+
+  const { error: logError } = await supabase.from('inventory_logs').insert(logs);
+  if (logError) console.error('⚠️ Log upload error:', logError.message);
+
+  alert('✅ Inventory uploaded and logged successfully!');
+  fetchItems(user);
 };
-
-
-
-
 
 const uploadToSupabase = async (rows) => {
   // Normalize keys: trim spaces, lowercase
@@ -235,7 +439,7 @@ const uploadToSupabase = async (rows) => {
       location: row['LOCATION'] || row['Location'] || row.location || '',
       unitlocation: row['unit location'] || '',
       notes: row['notes'] || '',
-      dining_unit: row['Dining Unit']?.trim() || (user.role === 'admin' ? selectedUnit : user.unit) || 'Unknown',
+      dining_unit: row['Dining Unit']?.trim() || (user?.role === 'admin' ? selectedUnit : user?.unit) || 'Unknown',
 
 
       unit: row['unit'] || '',
@@ -254,7 +458,8 @@ console.log('Category in formatted upload:', formatted.map(f => f.category));
   }
 
   alert('✅ Upload successful!');
-  fetchItems();
+  fetchItems(user); // ✅ Explicitly pass the logged-in user
+
 
   // === Generate QR codes for SKUs ===
   const zip = new JSZip();
@@ -274,10 +479,6 @@ console.log('Category in formatted upload:', formatted.map(f => f.category));
   const content = await zip.generateAsync({ type: 'blob' });
   saveAs(content, 'Inventory_QRCodes.zip');
 };
-
-
-
-
   const exportToExcel = () => {
     const worksheet = XLSX.utils.json_to_sheet(items);
     const workbook = XLSX.utils.book_new();
@@ -289,7 +490,8 @@ console.log('Category in formatted upload:', formatted.map(f => f.category));
     setCollapsedUnits(prev => ({ ...prev, [unit]: !prev[unit] }));
   };
 
-  const renderChart = (data) => {
+  // ✅ Helper function
+const renderChart = (data) => {
   const categoryTotals = data.reduce((acc, item) => {
     acc[item.category] = (acc[item.category] || 0) + Number(item.qty_on_hand);
     return acc;
@@ -313,27 +515,32 @@ console.log('Category in formatted upload:', formatted.map(f => f.category));
 };
 
 
-  return (
-    <div className="p-6">
-      <BackToInventoryDashboard />
-      <h2 className="text-xl font-bold mb-4">
-        Master Inventory View — {user.role === 'admin' ? (selectedUnit === 'Administration' ? 'All Units' : selectedUnit) : user.unit}
-      </h2>
 
-      {user?.role === 'admin' && (
-        <div className="mb-4">
-          <label className="mr-2 font-semibold">View dining_unit:</label>
-          <select
-            value={selectedUnit}
-            onChange={(e) => setSelectedUnit(e.target.value)}
-            className="border rounded p-2"
-          >
-            {ALL_UNITS.map(unit => (
-              <option key={unit} value={unit}>{unit}</option>
-            ))}
-          </select>
-        </div>
-      )}
+// ✅ This is now your main InventoryTable() component return:
+return (
+  <div className="p-6">
+    <BackToInventoryDashboard />
+    <h2 className="text-xl font-bold mb-4">
+      Master Inventory View — {user?.role === 'admin'
+        ? (selectedUnit === 'Administration' ? 'All Units' : selectedUnit)
+        : user?.unit}
+    </h2>
+
+    {user?.role === 'admin' && (
+      <div className="mb-4">
+        <label className="mr-2 font-semibold">View dining_unit:</label>
+        <select
+          value={selectedUnit}
+          onChange={(e) => setSelectedUnit(e.target.value)}
+          className="border rounded p-2"
+        >
+          {ALL_UNITS.map(unit => (
+            <option key={unit} value={unit}>{unit}</option>
+          ))}
+        </select>
+      </div>
+    )}
+    
 
       <input
         type="text"
@@ -347,6 +554,40 @@ console.log('Category in formatted upload:', formatted.map(f => f.category));
         <button onClick={exportToExcel} className="bg-blue-500 text-white px-3 py-1 rounded shadow">
           Export to Excel
         </button>
+
+{lastUploadedItems.length > 0 && (
+  <div ref={qrSectionRef} className="mt-10 border-t pt-6">
+    <h2 className="text-xl font-semibold mb-4">📦 QR Code Labels for Uploaded Items</h2>
+
+
+<button
+  onClick={() => window.print()}
+  className="mb-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+>
+  🖨️ Print All Labels
+</button>
+
+
+    
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+      {lastUploadedItems.map((item) => (
+        <div key={item.sku} className="p-4 border rounded-lg shadow bg-white">
+          <QRCodeLabel
+            sku={item.sku}
+            name={item.name}
+            unit={item.unit}
+            location={item.location}
+            diningUnit={item.dining_unit}
+          />
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
+
+
+
         {selectedUnit !== 'Administration' && (
           <input type="file" accept=".csv,.xlsx" onChange={handleFileUpload} className="border rounded p-2" />
         )}
@@ -361,7 +602,7 @@ console.log('Category in formatted upload:', formatted.map(f => f.category));
           );
 
           const totalQty = filteredItems.reduce((sum, i) => sum + (i.qty_on_hand || 0), 0);
-const totalVal = filteredItems.reduce((sum, i) => sum + (i.qty_on_hand || 0) * (i.unitPrice || 0), 0);
+          const totalVal = filteredItems.reduce((sum, i) => sum + (i.qty_on_hand || 0) * (i.unitPrice || 0), 0);
 
 
           return (
@@ -377,6 +618,7 @@ const totalVal = filteredItems.reduce((sum, i) => sum + (i.qty_on_hand || 0) * (
   <tr>
     <th className="border p-2">Item</th>
     <th className="border p-2">SKU</th>
+    <th className="border p-2">QR Code</th> {/* ✅ Add this */}
     <th className="border p-2">Category</th>
     <th className="border p-2">Qty</th>
     <th className="border p-2">Dining Unit</th>
@@ -385,23 +627,36 @@ const totalVal = filteredItems.reduce((sum, i) => sum + (i.qty_on_hand || 0) * (
     <th className="border p-2">Ext Price</th>
   </tr>
 </thead>
-
-
                     <tbody>
                       {filteredItems.map((item, i) => (
                         <tr key={i}>
                           <td className="border p-2">{item.name}</td>
                           <td className="border p-2">{item.sku}</td>
+  <td className="border p-2">
+  {item.qr_path ? (
+    <a
+      href={`https://xsnvzidsrlrsgiqhbfaz.supabase.co/storage/v1/object/public/qrlabels/${item.qr_path}`}
+      target="_blank"
+      rel="noreferrer"
+      className="text-blue-600 underline"
+    >
+      View QR
+    </a>
+  ) : (
+    <span className="text-gray-400">No QR</span>
+  )}
+</td>
+
+
+
                           <td className="border p-2">{item.category || '-'}</td>
                           <td className="border p-2">{item.qty_on_hand}</td>
                           <td className="border p-2">{item.dining_unit}</td>
                           <td className="border p-2">{item.location || '-'}</td>
                           <td className="border p-2">${Number(item.unitPrice || 0).toFixed(2)}</td>
-<td className="border p-2 text-right">
-  ${((item.qty_on_hand || 0) * (item.unitPrice || 0)).toFixed(2)}
-</td>
-
-
+                          <td className="border p-2 text-right">
+                          ${((item.qty_on_hand || 0) * (item.unitPrice || 0)).toFixed(2)}
+                </td>
                         </tr>
                       ))}
                     </tbody>
@@ -414,19 +669,18 @@ const totalVal = filteredItems.reduce((sum, i) => sum + (i.qty_on_hand || 0) * (
         })
       ) : (
         <table className="w-full border-collapse border text-sm">
-         <thead className="bg-gray-100">
+<thead className="bg-gray-100">
   <tr>
     <th className="border p-2">Item</th>
     <th className="border p-2">SKU</th>
     <th className="border p-2">Category</th>
     <th className="border p-2">Qty</th>
     <th className="border p-2">Dining Unit</th>
-    <th className="border p-2">Location</th> {/* ✅ Add this */}
+    <th className="border p-2">Location</th>
     <th className="border p-2">Price</th>
     <th className="border p-2">Ext Price</th>
   </tr>
 </thead>
-
 <tbody>
   {items
     .filter(item =>

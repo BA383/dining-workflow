@@ -5,16 +5,50 @@ import QRCode from 'qrcode';
 import BackToInventoryDashboard from '../Components/BackToInventoryDashboard';
 import QRCodeLabel from '../Components/QRCodeLabel';
 import html2canvas from 'html2canvas';
+import { isAdmin, isDining } from '../utils/permissions'; // adjust path as needed
 
+
+const uploadQRCodeToStorage = async (sku, dataUrl) => {
+  const fileName = `labels/${sku}_${Date.now()}.png`;
+  const fileBlob = await (await fetch(dataUrl)).blob();
+const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+  const { data, error } = await supabase.storage
+    .from('qrlabels') // ✅ match your bucket name
+    .upload(fileName, fileBlob, {
+      contentType: 'image/png',
+      upsert: true,
+    });
+
+  if (error) {
+    console.error(`❌ Failed to upload QR for ${sku}:`, error.message);
+    return null;
+  }
+
+  return data.path;
+};
 
 
 
 function InventoryForm() {
+ // ✅ Check permissions immediately
+  if (!isAdmin() && !isDining()) {
+  return (
+    <div className="p-6">
+      <p className="text-red-600 font-semibold text-lg">
+        🚫 Access Denied: Only Admins and Dining staff can access this page.
+      </p>
+    </div>
+  );
+}
+
+
+
   const user = JSON.parse(localStorage.getItem('user'));
 
  const [form, setForm] = useState({
   barcode: '',
-  dining_unit: user?.role === 'admin' ? 'Administration' : user?.unit || '',
+  dining_unit: user?.role === 'admin' ? '' : (user?.unit ?? ''),
   email: user?.email || '',
   itemName: '',
   category: '',
@@ -35,7 +69,7 @@ const uploadQRCodeLabel = async (element, barcode) => {
 
     const fileName = `labels/${barcode}_${Date.now()}.png`;
     const { data, error } = await supabase.storage
-      .from('qr_labels')
+      .from('qrlabels')
       .upload(fileName, blob, {
         contentType: 'image/png',
         upsert: true
@@ -78,10 +112,17 @@ const [lastRegisteredItem, setLastRegisteredItem] = useState(null);
       alert('Please provide a barcode and item name.');
       return;
     }
-    if (!form.dining_unit) {
-  alert('Please select a unit to register this item under.');
-  return;
+    
+    
+    if (!form.dining_unit || form.dining_unit === 'Administration') {
+  if (user?.role === 'admin') {
+    alert('Please select a dining unit before submitting.');
+    return;
+  } else {
+    console.warn('⚠️ Non-admin user is missing a unit unexpectedly.');
+  }
 }
+
 
 
 // ✅ Check for existing SKU within the same dining unit
@@ -102,6 +143,28 @@ if (existing && existing.length > 0) {
   return;
 }
 
+// Assume you already inserted the item into inventory here...
+
+// ✅ After successful insert, generate and upload QR:
+try {
+  const qrDataUrl = await QRCode.toDataURL(form.sku);
+  const qrPath = await uploadQRCodeToStorage(form.sku, qrDataUrl);
+
+  if (qrPath) {
+    const { error: updateError } = await supabase.from('inventory')
+      .update({ qr_path: qrPath }) // ✅ Ensure this matches the column in Supabase
+      .eq('sku', form.sku)
+      .eq('dining_unit', user.unit);
+
+    if (updateError) {
+      console.error(`❌ Failed to update qr_path for ${form.sku}:`, updateError.message);
+    }
+  }
+} catch (err) {
+  console.error(`QR gen/upload failed for ${form.sku}:`, err);
+}
+
+
 
 
 
@@ -110,7 +173,7 @@ const newItem = {
   name: form.itemName,
   category: form.category,
   unit: form.unitMeasure,
-  quantity: toNumber(form.qty_on_hand),
+  qty_on_hand: toNumber(form.quantity),  // ✅ FIXED: use form.quantity and match DB field
   unitPrice: toNumber(form.unitPrice),
   extendedPrice,
   location: form.location,
@@ -152,7 +215,7 @@ await supabase.rpc('set_config', {
 await supabase.from('inventory_logs').insert([{
   sku: form.barcode,
   name: form.itemName,
-  qty_on_hand: form.qty_on_hand,
+  quantity: toNumber(form.quantity), // ✅ use the correct column name
   action: 'register',
   unit: form.unitMeasure,
   location: form.location,
@@ -230,8 +293,9 @@ const handlePrintLabel = async () => {
 
       <h1 className="text-2xl font-bold mb-4">Register Inventory Item</h1>
       <p className="text-sm text-gray-700 mb-2">
-  <strong>Active unit:</strong> {form.dining_unit || 'Not Assigned'}
+  <strong>Active unit:</strong> {user.unit || 'Not Assigned'}
 </p>
+
 
 
       <ScannerComponent onScan={handleScan} />
@@ -327,43 +391,72 @@ const handlePrintLabel = async () => {
         <input type="date" name="dateReceived" value={form.dateReceived} onChange={handleChange} className="border rounded p-2 w-full" />
         <textarea name="notes" placeholder="Notes or Expiry Info" value={form.notes} onChange={handleChange} className="border rounded p-2 w-full" />
 
-        <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+      <div className="flex gap-4">
+        <button
+          type="submit"
+          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+        >
           Submit
         </button>
-      </form>
 
-     {lastRegisteredItem && (
-  <div className="mt-6 border-t pt-4">
-    <h3 className="text-lg font-semibold text-gray-700 mb-2">QR Code Label</h3>
-    <QRCodeLabel
-  ref={labelRef}
-  sku={lastRegisteredItem.sku}
-  name={lastRegisteredItem.name}
-  unit={lastRegisteredItem.unit}
-  location={lastRegisteredItem.location}
-  diningUnit={lastRegisteredItem.diningUnit}
-/>
+        <button
+          type="button"
+          onClick={() => {
+            setForm({
+              barcode: '',
+              dining_unit: user?.role === 'admin' ? '' : (user?.unit ?? ''),
+              email: user?.email || '',
+              itemName: '',
+              category: '',
+              quantity: '',
+              unitPrice: '',
+              unitMeasure: '',
+              location: '',
+              dateReceived: '',
+              notes: '',
+              reorder_level: '',
+            });
+            setLastRegisteredItem(null);
+          }}
+          className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+        >
+          Clear Fields
+        </button>
+      </div>
+    </form>  {/* ✅ CLOSE FORM HERE */}
 
-    <div className="mt-4 flex gap-4">
-      <button
-        onClick={handleDownloadLabel}
-        className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
-      >
-        Download Label
-      </button>
-      <button
-        onClick={handlePrintLabel}
-        className="bg-gray-600 text-white px-3 py-1 rounded hover:bg-gray-700"
-      >
-        Print Label
-      </button>
-    </div>
+    {lastRegisteredItem && (
+      <div className="mt-6 border-t pt-4">
+        <h3 className="text-lg font-semibold text-gray-700 mb-2">QR Code Label</h3>
+        <QRCodeLabel
+          ref={labelRef}
+          sku={lastRegisteredItem.sku}
+          name={lastRegisteredItem.name}
+          unit={lastRegisteredItem.unit}
+          location={lastRegisteredItem.location}
+          diningUnit={lastRegisteredItem.diningUnit}
+        />
+
+        <div className="mt-4 flex gap-4">
+          <button
+            onClick={handleDownloadLabel}
+            className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+          >
+            Download Label
+          </button>
+          <button
+            onClick={handlePrintLabel}
+            className="bg-gray-600 text-white px-3 py-1 rounded hover:bg-gray-700"
+          >
+            Print Label
+          </button>
+        </div>
+      </div>
+    )}
   </div>
-)}
+); // ✅ Close the return JSX
 
-
-    </div>
-  );
 }
 
 export default InventoryForm;
+

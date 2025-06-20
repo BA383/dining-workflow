@@ -2,68 +2,139 @@ import React, { useState, useEffect, useCallback } from 'react';
 import ScannerComponent from '../Components/ScannerComponent';
 import { supabase } from '../supabaseClient';
 import BackToInventoryDashboard from '../Components/BackToInventoryDashboard';
+import { isAdmin, isDining } from '../utils/permissions';
+import { getCurrentUser, setRLSContext } from '../utils/userSession';
+
+
 
 function InventoryCheckInOut() {
+  if (!isAdmin() && !isDining()) {
+    return (
+      <div className="p-6">
+        <p className="text-red-600 font-semibold">🚫 Access Denied: Only Dining or Admin users can access this page.</p>
+      </div>
+    );
+  }
+
   const [action, setAction] = useState('checkin');
   const [items, setItems] = useState([]);
-  const [form, setForm] = useState({ sku: '', name: '', quantity: 1 });
+  const [form, setForm] = useState({
+    sku: '',
+    name: '',
+    quantity: '',
+    targetUnit: ''
+  });
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [activityLog, setActivityLog] = useState([]);
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const isAdmin = user.role === 'admin';
-  const [selectedUnit, setSelectedUnit] = useState(user.unit || '');
+  const [user, setUser] = useState({});
+  const [selectedUnit, setSelectedUnit] = useState('');
+  const [targetUnit, setTargetUnit] = useState('');
+
+
+  const adminUser = user.role === 'admin';
+
+  // ✅ This should NOT be inside fetchInventory
+ useEffect(() => {
+  async function fetchUser() {
+    const currentUser = await getCurrentUser();
+    setUser(currentUser);
+    setSelectedUnit(currentUser?.unit || '');
+  }
+  fetchUser();
+}, []);
+
+
+
 
   const fetchInventory = useCallback(async () => {
-    const query = supabase.from('inventory').select('*');
-    if (user.role !== 'admin') {
-      query.eq('dining_unit', user.unit);
-    } else if (selectedUnit) {
-      query.eq('dining_unit', selectedUnit);
-    }
-    const { data, error } = await query;
-    if (!error) setItems(data);
-    else console.error('Error fetching inventory:', error.message);
-  }, [user.unit, user.role, selectedUnit]);
+
+  let query = supabase.from('inventory').select('*');
+
+  if (user.role !== 'admin') {
+    query = query.eq('dining_unit', user.unit);
+  } else if (selectedUnit) {
+    query = query.eq('dining_unit', selectedUnit);
+  }
+
+  const { data, error } = await query;
+  if (!error) setItems(data);
+  else console.error('Error fetching inventory:', error.message);
+}, [user.unit, user.role, selectedUnit]);
+
 
   useEffect(() => {
     fetchInventory();
   }, [fetchInventory]);
 
+
+
   const handleScan = useCallback(async (barcode) => {
-    const unitToQuery = (user.role === 'admin' ? selectedUnit : user.unit || '').trim();
-    const { data, error } = await supabase
-      .from('inventory')
-      .select('*')
-      .eq('sku', barcode)
-      .eq('dining_unit', unitToQuery);
+  const unitToQuery = (user.role === 'admin' ? selectedUnit : user.unit || '').trim();
 
-    if (error || !data || data.length === 0) {
-      setFeedback('❌ Item not found or error occurred.');
-      return;
-    }
+  const { data, error } = await supabase
+    .from('inventory')
+    .select('*')
+    .eq('sku', barcode)
+    .eq('dining_unit', unitToQuery);
 
-    if (data.length > 1) {
-      setFeedback('⚠️ This SKU is registered under multiple entries. Please ensure each SKU is uniquely assigned per unit.');
-      return;
-    }
+  if (error || !data || data.length === 0) {
+    setFeedback('❌ Error occurred, item is not registered to dining unit or not filtered.');
+    return;
+  }
 
-    const item = data[0];
-    setForm({ sku: barcode, name: item.name, quantity: 1 });
-    setFeedback('');
-  }, [selectedUnit, user.unit]);
+  if (data.length > 1) {
+    setFeedback('⚠️ This SKU is registered under multiple entries. Please ensure each SKU is uniquely assigned per unit.');
+    return;
+  }
+
+  const item = data[0];
+
+  setForm(prev => {
+  if (prev.sku === barcode) {
+    // Increment if it's the same item
+    return {
+      ...prev,
+      quantity: Number(prev.quantity || 0) + 1
+    };
+  } else {
+    // First scan of a new item
+    return {
+      sku: barcode,
+      name: item.name,
+      quantity: 1
+    };
+  }
+});
+
+
+  setFeedback('');
+}, [selectedUnit, user.unit]);
+
 
   useEffect(() => {
-    const fetchLog = async () => {
-      const query = supabase.from('inventory_logs').select('*').order('timestamp', { ascending: false }).limit(10);
-      if (user.role !== 'admin') query.eq('dining_unit', user.unit);
-      if (user.role === 'admin' && selectedUnit) query.eq('dining_unit', selectedUnit);
+  const fetchLog = async () => {
+    let query = supabase.from('inventory_logs')
+      .select('*')
+      .order('timestamp', { ascending: false })
+      .limit(10);
 
-      const { data, error } = await query;
-      if (!error) setActivityLog(data);
-    };
-    fetchLog();
-  }, [user.unit, user.role]);
+    if (user.role !== 'admin') {
+      query = query.eq('dining_unit', user.unit);
+    } else if (selectedUnit) {
+      query = query.eq('dining_unit', selectedUnit);
+    }
+
+    const { data, error } = await query;
+    if (!error) setActivityLog(data);
+  };
+
+  fetchLog();
+}, [user.unit, user.role, selectedUnit]);
+
+
+
+
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -72,58 +143,108 @@ function InventoryCheckInOut() {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    const unitToQuery = (user.role === 'admin' ? selectedUnit : user.unit || '').trim();
+  e.preventDefault();
+  const unitToQuery = (user.role === 'admin' ? selectedUnit : user.unit || '').trim();
 
-    if (!unitToQuery || !form.sku || !form.quantity) return;
-    const delta = action === 'checkin' ? parseInt(form.quantity) : -parseInt(form.quantity);
+  if (!unitToQuery || !form.sku || !form.quantity) return;
 
-    const { data: existingItem, error: fetchError } = await supabase
+  let delta = 0;
+  if (action === 'checkin') delta = parseInt(form.quantity);
+  else if (action === 'checkout' || action === 'waste' || action === 'transfer') delta = -parseInt(form.quantity);
+
+  if (action === 'transfer' && !form.targetUnit) {
+    alert('❌ Please select a target unit for transfer.');
+    return;
+  }
+
+  // Step 1: Update sending unit
+  const { data: existingItem, error: fetchError } = await supabase
+    .from('inventory')
+    .select('qty_on_hand')
+    .eq('sku', form.sku)
+    .eq('dining_unit', unitToQuery)
+    .single();
+
+  if (fetchError || !existingItem) {
+    alert('❌ Item not found or fetch failed.');
+    return;
+  }
+
+  const newQty = (existingItem.qty_on_hand || 0) + delta;
+
+  const { error: updateError } = await supabase
+    .from('inventory')
+    .update({
+      qty_on_hand: newQty,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('sku', form.sku)
+    .eq('dining_unit', unitToQuery);
+
+  if (updateError) {
+    console.error('Error updating qty_on_hand:', updateError.message);
+  }
+
+  // Step 2: Handle receiver update if it's a transfer
+  if (action === 'transfer' && form.targetUnit) {
+    const { data: targetItem, error: targetError } = await supabase
       .from('inventory')
-      .select('qty_on_hand')
+      .select('*')
       .eq('sku', form.sku)
-      .eq('dining_unit', unitToQuery)
+      .eq('dining_unit', form.targetUnit)
       .single();
 
-    if (fetchError || !existingItem) {
-      alert('❌ Item not found or fetch failed.');
-      return;
-    }
-
-    const newQty = (existingItem.qty_on_hand || 0) + delta;
-
-    const { error: updateError } = await supabase
-      .from('inventory')
-      .update({
-        qty_on_hand: newQty,
+    if (targetItem) {
+      // ✅ Update qty_on_hand in target unit
+      const updatedQty = (targetItem.qty_on_hand || 0) + parseInt(form.quantity);
+      await supabase
+        .from('inventory')
+        .update({
+          qty_on_hand: updatedQty,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('sku', form.sku)
+        .eq('dining_unit', form.targetUnit);
+    } else {
+      // ✅ Insert new item into target unit
+      const originItem = items.find(i => i.sku === form.sku);
+      await supabase.from('inventory').insert([{
+        sku: form.sku,
+        name: form.name,
+        category: originItem?.category || '',
+        unit: originItem?.unit || '',
+        location: originItem?.location || '',
+        qty_on_hand: parseInt(form.quantity),
+        unitPrice: originItem?.unitPrice || 0,
+        dining_unit: form.targetUnit,
         updated_at: new Date().toISOString(),
-      })
-      .eq('sku', form.sku)
-      .eq('dining_unit', unitToQuery);
-
-    if (updateError) {
-      console.error('Error updating qty_on_hand:', updateError.message);
+      }]);
     }
+  }
 
-    await supabase.from('inventory_logs').insert([{
-      sku: form.sku,
-      name: form.name,
-      quantity: form.quantity,
-      action,
-      location: items.find(i => i.sku === form.sku)?.location || '',
-      dining_unit: unitToQuery,
-      email: user.email,
-      timestamp: new Date(),
-    }]);
+  // Step 3: Log the activity
+  await supabase.from('inventory_logs').insert([{
+    sku: form.sku,
+    name: form.name,
+    quantity: form.quantity,
+    action,
+    location: items.find(i => i.sku === form.sku)?.location || '',
+    dining_unit: unitToQuery,
+    target_unit: action === 'transfer' ? form.targetUnit : null,
+    email: user.email,
+    timestamp: new Date(),
+  }]);
 
-    const updatedItems = items.map(item =>
-      item.sku === form.sku ? { ...item, qty_on_hand: newQty } : item
-    );
+  // Update UI
+  const updatedItems = items.map(item =>
+    item.sku === form.sku ? { ...item, qty_on_hand: newQty } : item
+  );
 
-    setItems(updatedItems);
-    setForm({ sku: '', name: '', quantity: 1 });
-    setFeedback('✅ Inventory updated.');
-  };
+  setItems(updatedItems);
+  setForm({ sku: '', name: '', quantity: 1 });
+  setFeedback('✅ Inventory updated.');
+};
+
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -147,6 +268,31 @@ function InventoryCheckInOut() {
           </select>
         </div>
       )}
+{action === 'transfer' && (
+  <div className="mb-4">
+    <label className="mr-2 font-semibold">Transfer to unit:</label>
+    <select
+      value={form.targetUnit}
+      onChange={(e) => setForm(prev => ({ ...prev, targetUnit: e.target.value }))}
+      className="border p-2 rounded"
+    >
+      <option value="">-- Select Target Unit --</option>
+      {['Discovery', 'Regattas', 'Commons', 'Palette', 'Einstein']
+        .filter(unit => unit !== (user.role === 'admin' ? selectedUnit : user.unit))
+        .map(unit => (
+          <option key={unit} value={unit}>{unit}</option>
+        ))}
+    </select>
+
+    {/* 🚫 Optional Warning if same unit somehow selected */}
+    {form.targetUnit === (user.role === 'admin' ? selectedUnit : user.unit) && (
+      <p className="text-red-600 text-sm mt-1">
+        ⚠️ Target unit cannot be the same as the source unit.
+      </p>
+    )}
+  </div>
+)}
+
 
       <ScannerComponent onScan={handleScan} />
 
@@ -159,6 +305,8 @@ function InventoryCheckInOut() {
         >
           <option value="checkin">Check In</option>
           <option value="checkout">Check Out</option>
+          <option value="waste">Waste</option>
+          <option value="transfer">Transfer</option>
         </select>
       </div>
 
@@ -180,14 +328,15 @@ function InventoryCheckInOut() {
           className="border p-2 rounded"
         />
         <input
-          type="number"
-          name="quantity"
-          min={1}
-          placeholder="Quantity"
-          value={form.quantity}
-          onChange={handleInputChange}
-          className="border p-2 rounded"
-        />
+  type="number"
+  name="quantity"
+  value={form.quantity}
+  onChange={(e) =>
+    setForm(prev => ({ ...prev, quantity: e.target.value }))
+  }
+  className="border rounded p-2 w-full"
+/>
+
         <button
           type="submit"
           className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
@@ -222,34 +371,6 @@ function InventoryCheckInOut() {
           ))}
         </tbody>
       </table>
-
-      <div className="mt-10">
-        <h3 className="text-lg font-semibold mb-2 text-gray-800">Recent Inventory Activity</h3>
-        <table className="w-full border-collapse border text-sm">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="border p-2">Timestamp</th>
-              <th className="border p-2">SKU</th>
-              <th className="border p-2">Name</th>
-              <th className="border p-2">Qty</th>
-              <th className="border p-2">Action</th>
-              <th className="border p-2">User</th>
-            </tr>
-          </thead>
-          <tbody>
-            {activityLog.map((log, i) => (
-              <tr key={i}>
-                <td className="border p-2">{new Date(log.timestamp).toLocaleString()}</td>
-                <td className="border p-2">{log.sku}</td>
-                <td className="border p-2">{log.name}</td>
-                <td className="border p-2">{log.quantity}</td>
-                <td className="border p-2">{log.action}</td>
-                <td className="border p-2">{log.email}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }

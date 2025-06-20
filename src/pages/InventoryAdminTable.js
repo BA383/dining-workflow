@@ -1,9 +1,60 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import BackToInventoryDashboard from '../Components/BackToInventoryDashboard';
+import { isAdmin } from '../utils/permissions';
+import { getCurrentUser } from '../utils/userSession';
 
 function InventoryAdminTable() {
-  const user = JSON.parse(localStorage.getItem('user'));
+  const [user, setUser] = useState({});
+  const [selectedUnit, setSelectedUnit] = useState('');
+  const [items, setItems] = useState([]);
+  const [editingItemId, setEditingItemId] = useState(null);
+  const [selectedItems, setSelectedItems] = useState([]);
+
+
+  const [unitFilter, setUnitFilter] = useState('All'); // ✅ Make sure this line is here
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 20;
+
+
+
+const fetchItems = async () => {
+  let query = supabase.from('inventory').select('*');
+
+  if (unitFilter !== 'All') {
+    query = query.eq('dining_unit', unitFilter);
+  }
+
+  const { data, error } = await query;
+
+  if (!error) setItems(data);
+  else console.error(error);
+};
+
+useEffect(() => {
+  fetchItems();
+}, [unitFilter]);
+
+
+
+  useEffect(() => {
+    async function fetchUser() {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+      setSelectedUnit(currentUser?.unit || '');
+    }
+    fetchUser();
+  }, []);
+
+
+  if (!isAdmin()) {
+    return (
+      <div className="p-6">
+        <p className="text-red-600 font-semibold">🚫 Access Denied: Admins only.</p>
+      </div>
+    );
+  }
+
   if (user?.role !== 'admin') {
     return (
       <div className="p-6 text-red-600">
@@ -13,11 +64,12 @@ function InventoryAdminTable() {
     );
   }
 
-  const [items, setItems] = useState([]);
-  const [editingItemId, setEditingItemId] = useState(null);
-  const [selectedItems, setSelectedItems] = useState([]);
+  // ✅ Then return your actual table below...
+}
 
-const handleQtyChange = (index, value) => {
+
+
+ const handleQtyChange = (index, value) => {
   const updatedItems = [...items];
   updatedItems[index].qty_on_hand = Number(value);
   setItems(updatedItems);
@@ -30,16 +82,6 @@ const handleQtyChange = (index, value) => {
     'BEEF', 'PORK', 'MEAT', 'POULTRY', 'DRY SPICES', 'FRESH HERBS', 'FRUITS & VEGETABLES',
     'ICE CREAM & SHERBERT', 'DRY PASTA', 'FROZEN GOODS', 'DRY GOODS', 'OTHER'
   ];
-
-  useEffect(() => {
-    fetchItems();
-  }, []);
-
-  const fetchItems = async () => {
-    const { data, error } = await supabase.from('inventory').select('*');
-    if (!error) setItems(data);
-    else console.error(error);
-  };
 
   const handleChange = (id, field, value) => {
     setItems(prevItems => prevItems.map(item =>
@@ -61,7 +103,7 @@ const handleQtyChange = (index, value) => {
 const { error: logError } = await supabase.from('inventory_logs').insert([{
   sku: item.sku,
   name: item.name,
-  quantity: item.qty_on_hand || 0,  // Prevents crashing if qty is undefined
+  quantity: item.quantity ?? item.qty_on_hand ?? 0,
   location: item.location || '',
   category: item.category || '',
   unit: item.unit || '',
@@ -79,25 +121,33 @@ const { error: logError } = await supabase.from('inventory_logs').insert([{
     fetchItems();
   };
 
+
+
+
 const handleDelete = async (id) => {
   const item = items.find(i => i.id === id);
-  if (!item) return;
+  if (!item) {
+    console.warn('⚠️ Item not found for deletion');
+    return;
+  }
 
-  // Set RLS unit
+  console.log('🧩 Full item before delete:', item);
+
   await supabase.rpc('set_config', {
     config_key: 'request.unit',
     config_value: item.dining_unit || user.unit,
   });
 
-  // Delete item
   const { error } = await supabase.from('inventory').delete().eq('id', id);
-  if (error) return alert('Delete failed: ' + error.message);
+  if (error) {
+    alert('Delete failed: ' + error.message);
+    return;
+  }
 
-  // ✅ Log the deletion to inventory_logs
-  const { error: logError } = await supabase.from('inventory_logs').insert([{
+  const logEntry = {
     sku: item.sku,
     name: item.name,
-    quantity: item.qty_on_hand || 0,
+    quantity: item.quantity ?? item.qty_on_hand ?? 0,
     location: item.location || '',
     category: item.category || '',
     unit: item.unit || '',
@@ -105,18 +155,30 @@ const handleDelete = async (id) => {
     dining_unit: item.dining_unit || user.unit,
     email: user.email || '',
     timestamp: new Date(),
-  }]);
+  };
 
-  if (logError) console.error('Log insert error:', logError.message);
+  console.log('🪵 Attempting to log delete:', logEntry);
+
+  const { error: logError } = await supabase.from('inventory_logs').insert([logEntry]);
+
+  if (logError) {
+    console.error('❌ Log insert failed:', logError.message);
+  } else {
+    console.log('✅ Log successfully inserted for deletion');
+  }
 
   alert('Item deleted.');
-  fetchItems(); // Refresh table
+  fetchItems();
 };
 
-
- const handleBulkDelete = async () => {
+const handleBulkDelete = async () => {
   const deletedItems = items.filter(item => selectedItems.includes(item.id));
-  if (deletedItems.length === 0) return;
+  if (deletedItems.length === 0) {
+    console.warn('⚠️ No items selected for bulk delete');
+    return;
+  }
+
+  console.log('📦 Deleting items:', deletedItems);
 
   const unitForConfig = deletedItems[0]?.dining_unit || user.unit;
 
@@ -134,35 +196,40 @@ const handleDelete = async (id) => {
     return;
   }
 
-  // ✅ Log deleted items to inventory_logs
-  const logs = deletedItems.map(item => ({
-    sku: item.sku,
-    name: item.name,
-    quantity: item.qty_on_hand || 0,
-    location: item.location || '',
-    category: item.category || '',
-    unit: item.unit || '',
-    action: 'bulk delete',
-    dining_unit: item.dining_unit || user.unit,
-    email: user.email || '',
-    timestamp: new Date(),
-  }));
+  const logs = deletedItems.map(item => {
+    const log = {
+      sku: item.sku,
+      name: item.name,
+      quantity: Math.round(Number(item.quantity ?? item.qty_on_hand ?? 0)),
+      location: item.location || '',
+      category: item.category || '',
+      unit: item.unit || '',
+      action: 'bulk delete',
+      dining_unit: item.dining_unit || user.unit,
+      email: user.email || '',
+      timestamp: new Date(),
+    };
+    console.log('🪵 Log entry for bulk delete:', log);
+    return log;
+  });
 
   const { error: logError } = await supabase.from('inventory_logs').insert(logs);
-  if (logError) console.error('Logging bulk delete failed:', logError.message);
+  if (logError) {
+    console.error('❌ Logging bulk delete failed:', logError.message);
+  } else {
+    console.log('✅ Bulk delete logs inserted');
+  }
 
   alert('Selected items deleted.');
   setSelectedItems([]);
   fetchItems();
 };
 
-
-
   const toggleSelect = (id) => {
     setSelectedItems(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
-  };
+
 
   return (
     <div className="p-6">
@@ -177,7 +244,43 @@ const handleDelete = async (id) => {
           Delete Selected ({selectedItems.length})
         </button>
       )}
-
+<div className="flex justify-between items-center mb-4">
+  <div>
+    <label className="mr-2 font-medium">Filter by Dining Unit:</label>
+    <select
+      value={unitFilter}
+      onChange={(e) => {
+        setUnitFilter(e.target.value);
+        setCurrentPage(1); // reset page when unit changes
+      }}
+      className="border p-1 rounded"
+    >
+      <option value="All">All</option>
+      {UNIT_OPTIONS.map(unit => (
+        <option key={unit} value={unit}>{unit}</option>
+      ))}
+    </select>
+  </div>
+  <div className="flex gap-2 items-center">
+    <button
+      disabled={currentPage === 1}
+      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+      className="px-2 py-1 bg-gray-200 rounded disabled:opacity-50"
+    >
+      ◀ Prev
+    </button>
+    <span className="text-sm">
+      Page {currentPage} of {Math.ceil(items.length / rowsPerPage)}
+    </span>
+    <button
+      disabled={currentPage === Math.ceil(items.length / rowsPerPage)}
+      onClick={() => setCurrentPage(prev => prev + 1)}
+      className="px-2 py-1 bg-gray-200 rounded disabled:opacity-50"
+    >
+      Next ▶
+    </button>
+  </div>
+</div>
       <table className="w-full text-sm border border-collapse">
         <thead className="bg-gray-100">
           <tr>
@@ -194,9 +297,10 @@ const handleDelete = async (id) => {
           </tr>
         </thead>
         <tbody>
-          {items.map((item, i) => (
+          {items
+  .slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
+  .map((item, i) => (
   <tr key={item.id}>
-
               <td className="border p-2 text-center">
                 <input
                   type="checkbox"
@@ -237,7 +341,6 @@ const handleDelete = async (id) => {
     className="w-full text-right"
   />
 </td>
-
               <td className="border p-2">
                 <select
                   value={item.dining_unit || ''}
@@ -263,13 +366,16 @@ const handleDelete = async (id) => {
                 </select>
               </td>
               <td className="border p-2">
-                <input
-                  type="number"
-                  value={item.unitPrice || 0}
-                  onChange={(e) => handleChange(item.id, 'unitPrice', e.target.value)}
-                  className="w-full"
-                />
-              </td>
+  <div className="flex items-center">
+    <span className="mr-1 text-gray-500">$</span>
+    <input
+      type="number"
+      value={item.unitPrice || 0}
+      onChange={(e) => handleChange(item.id, 'unitPrice', e.target.value)}
+      className="w-full"
+    />
+  </div>
+</td>
               <td className="border p-2">
                 <input
                   value={item.notes || ''}

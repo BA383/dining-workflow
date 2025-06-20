@@ -1,43 +1,95 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import BackToInventoryDashboard from '../Components/BackToInventoryDashboard';
+import { isAdmin, isDining } from '../utils/permissions';
+import { getCurrentUser } from '../utils/userSession';
 
 function InventoryActivity() {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const isAdmin = user.role === 'admin';
-
+  const [user, setUser] = useState({});
   const [logs, setLogs] = useState([]);
-  const [selectedUnit, setSelectedUnit] = useState(isAdmin ? '' : user.unit);
+  const [selectedUnit, setSelectedUnit] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-
   const units = ['Discovery', 'Regattas', 'Commons', 'Palette', 'Einstein'];
 
- useEffect(() => {
-  const fetchLogs = async () => {
-    let query = supabase
-      .from('inventory_logs')
-      .select('*')
-      .order('timestamp', { ascending: false });
+  // ⛔️ Don't use user.role before declaring user
+const isAdminUser = user?.role === 'admin';
 
-    if (!isAdmin) {
-      query = query.eq('dining_unit', user.unit);
-    } else if (selectedUnit) {
-      query = query.eq('dining_unit', selectedUnit);
-    }
 
-    const { data, error } = await query;
+  // ✅ Set user and unit from local storage (or session)
+  useEffect(() => {
+  async function fetchUser() {
+    const currentUser = await getCurrentUser();
+    setUser(currentUser);
 
-    if (error) {
-      console.error('Activity fetch error:', error.message);
+    // ✅ Admins get "all", Dining users get their unit
+    if (currentUser?.role === 'admin') {
+      setSelectedUnit('all');
     } else {
-      setLogs(data || []);
-      setCurrentPage(1);
+      setSelectedUnit(currentUser?.unit || '');
     }
-  };
+  }
+  fetchUser();
+}, []);
 
-  fetchLogs();
-}, [selectedUnit, isAdmin, user.unit]);
+
+
+  // ✅ Permissions check AFTER user is loaded
+  if (!isAdmin() && !isDining()) {
+    return (
+      <div className="p-6">
+        <p className="text-red-600 font-semibold">🚫 Inventory is for Dining staff only.</p>
+      </div>
+    );
+  }
+
+  // ✅ Fallback in case admin has no selected unit
+  useEffect(() => {
+    if (isAdminUser && !selectedUnit) {
+      setSelectedUnit(user.unit);
+    }
+  }, [isAdminUser, user.unit, selectedUnit]);
+
+  // ✅ Fetch logs with RLS context
+  useEffect(() => {
+const fetchLogs = async () => {
+  if (!user?.role) return; // ✅ Ensure role is loaded before anything
+
+  const isAdminUser = user.role === 'admin'; // ✅ Define it locally
+
+  await supabase.rpc('set_config', {
+    config_key: 'request.unit',
+    config_value: selectedUnit || 'Administration',
+  });
+
+  await supabase.rpc('set_config', {
+    config_key: 'request.role',
+    config_value: user.role || 'user',
+  });
+
+  let query = supabase
+    .from('inventory_logs')
+    .select('sku, name, quantity, action, location, dining_unit, target_unit, email, timestamp')
+    .order('timestamp', { ascending: false });
+
+  if (isAdminUser && selectedUnit && selectedUnit !== 'all') {
+    query = query.eq('dining_unit', selectedUnit); // ✅ admin with unit filter
+  } else if (!isAdminUser && user.unit) {
+    query = query.or(`dining_unit.eq.${user.unit},target_unit.eq.${user.unit}`); // ✅ dining staff only
+  }
+
+  const { data, error } = await query;
+  if (!error) {
+    setLogs(data || []);
+    setCurrentPage(1);
+  } else {
+    console.error('Activity fetch error:', error.message);
+  }
+};
+
+
+    fetchLogs();
+  }, [selectedUnit, user]);
 
 
   const indexOfLast = currentPage * rowsPerPage;
@@ -91,6 +143,7 @@ function InventoryActivity() {
             <th className="border p-2">Qty</th>
             <th className="border p-2">Action</th>
             <th className="border p-2">Dining Unit</th>
+            <th className="border p-2">Target Unit</th>
             <th className="border p-2">Location</th>
             <th className="border p-2">User Email</th>
           </tr>
@@ -102,8 +155,17 @@ function InventoryActivity() {
               <td className="border p-2">{log.name}</td>
               <td className="border p-2">{log.sku}</td>
               <td className="border p-2">{log.quantity}</td>
-              <td className="border p-2">{log.action}</td>
+
+             <td className="border p-2">
+             {log.action}
+             {log.action === 'transfer' && log.target_unit && (
+             <span className="ml-1 text-blue-600">→ {log.target_unit}</span>
+      )}
+             </td>
+
+
               <td className="border p-2">{log.dining_unit}</td>
+              <td className="border p-2">{log.target_unit || '-'}</td>
               <td className="border p-2">{log.location || '-'}</td>
               <td className="border p-2">{log.email}</td>
             </tr>

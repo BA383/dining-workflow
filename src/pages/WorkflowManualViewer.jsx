@@ -1,6 +1,18 @@
 import React from 'react';
 import BackToAdminDashboard from '../BackToAdminDashboard';
+import { isAdmin, isDining } from '../utils/permissions'; // adjust path as needed
+
 function WorkflowManualViewer() {
+if (!isAdmin() && !isDining()) {
+    return (
+      <div className="p-6">
+        <p className="text-red-600 font-semibold">🚫 Workflow Manual view is for Dining staff only.</p>
+      </div>
+    );
+  }
+
+
+
   return (
     <div className="p-6">
       <BackToAdminDashboard />

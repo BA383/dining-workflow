@@ -4,6 +4,8 @@ import * as XLSX from 'xlsx';
 
 import React, { useState, useEffect } from 'react';
 import BackToAdminDashboard from './BackToAdminDashboard';
+import { isAdmin, isDining } from './utils/permissions';
+
 
 
 
@@ -24,6 +26,8 @@ const mapField = (target, label, value) => {
   if (cleanLabel.includes('mo credit sales tax')) target.moCreditSalesTax = value;
   if (cleanLabel.includes('mo credit sales')) target.moCreditSales = value;
 };
+
+
 
 
 const handleFileUpload = (e) => {
@@ -100,6 +104,19 @@ function Section({ title, children }) {
 }
 
 function RegattasForm() {
+// 🔐 Restrict access to Admins only
+  if (!isAdmin() && !isDining()) {
+  return (
+    <div className="p-6">
+      <p className="text-red-600 font-semibold text-lg">
+        🚫 Access Denied: Only Admins and Dining staff can access this page.
+      </p>
+    </div>
+  );
+}
+
+
+  
   const initialState = {
     unit: 'Regattas', fiscalYear: '', transmittalNumber: '', workDate: '',
     salesTaxable: '', checkSales: '', checkSalesTax: '', salesTaxCollected: '',

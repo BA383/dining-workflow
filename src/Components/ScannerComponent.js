@@ -9,9 +9,16 @@ function ScannerComponent({ onScan }) {
   useEffect(() => {
     if (!active || scannerRef.current) return;
 
+    console.log('📸 Initializing QR scanner...');
+
+    // Check camera permissions
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(() => console.log('📷 Camera access granted'))
+      .catch(err => console.error('🚫 Camera access denied:', err));
+
     const scanner = new Html5QrcodeScanner(
       containerId,
-      { fps: 10, qrbox: { width: 250, height: 250 } },
+      { fps: 10, qrbox: 300 }, // Larger box
       false
     );
 
@@ -19,11 +26,9 @@ function ScannerComponent({ onScan }) {
 
     scanner.render(
       (decodedText) => {
-        console.log('✅ Scanned:', decodedText);
-        onScan(decodedText);
-
-        // Optionally auto-stop after one scan
-        stopScanner();
+        console.log('✅ Scanned QR Code:', decodedText);
+        onScan(decodedText.trim()); // always trim
+        // stopScanner(); // Commented for testing multiple scans
       },
       (error) => {
         // Optional: console.warn("Scan error:", error);

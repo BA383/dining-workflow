@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ScanIcon, BanknoteIcon, FileTextIcon, ShieldIcon, BarChartIcon, BookOpenIcon } from 'lucide-react';
+import { ScanIcon, BanknoteIcon, FileTextIcon, ShieldIcon, BarChartIcon, BookOpenIcon, CalculatorIcon } from 'lucide-react';
 
 function QuickAccessToolbar() {
   return (
@@ -26,6 +26,12 @@ function QuickAccessToolbar() {
           <BarChartIcon className="h-5 w-5" />
           Director's Snapshot 
         </Link>
+
+<Link to="/run-eom-inventory" className="flex flex-col items-center text-xs text-blue-700 hover:text-blue-900">
+  <CalculatorIcon className="h-5 w-5" />
+  Run EOM 
+</Link>
+
         <Link to="/workflow-manual" className="flex flex-col items-center text-xs text-blue-700 hover:text-blue-900">
           <BookOpenIcon className="h-5 w-5" />
           Manual

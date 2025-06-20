@@ -19,6 +19,20 @@ import QuickAccessToolbar from './Components/QuickAccessToolbar';
 import InventoryReport from './pages/InventoryReport';
 import GeneralReport from './pages/GeneralReport';
 import WorkflowManualViewer from './pages/WorkflowManualViewer';
+import WasteAndTransferForm from './pages/WasteAndTransferForm';
+import RecipeConversion from './pages/RecipeConversion';
+import MenuProduction from './pages/MenuProduction';
+import ViewRecipes from './pages/ViewRecipes';
+import AdminUserManager from './pages/AdminUserManager';
+import ResetPassword from './pages/ResetPassword';
+import RunEOMInventory from './pages/RunEOMInventory';
+
+
+
+
+
+
+
 
 function AppContent() {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user') || '{}'));
@@ -92,6 +106,23 @@ function AppContent() {
             </ul>
           </nav>
 
+{user?.role === 'admin' && (
+  <>
+    <hr className="my-3 border-gray-600" />
+    <p className="text-xs text-gray-300 mb-2">Admin Tools</p>
+    <li>
+      <Link
+        to="/admin/users"
+        className="block bg-blue-800 text-white px-3 py-2 rounded hover:bg-blue-700"
+      >
+        Manage Users
+      </Link>
+    </li>
+  </>
+)}
+
+
+
           {/* Manual Link */}
           <div className="my-6 flex flex-col items-center">
             <Link to="/workflow-manual">
@@ -156,6 +187,14 @@ function AppContent() {
             <Route path="/inventory-admin" element={<InventoryAdminTable />} />
             <Route path="/inventory-report" element={<InventoryReport />} />
             <Route path="/general-report" element={<GeneralReport />} />
+            <Route path="/waste-transfer" element={<WasteAndTransferForm />} />
+            <Route path="/recipe-conversion" element={<RecipeConversion />} />
+            <Route path="/menu-production" element={<MenuProduction />} />
+            <Route path="/view-recipes" element={<ViewRecipes />} />
+            <Route path="/admin/users" element={<AdminUserManager />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/run-eom-inventory" element={<RunEOMInventory />} />
+
           </Routes>
         </main>
       </div>
