@@ -1,92 +1,7 @@
-import Papa from 'papaparse'; // CSV parser library
-
-import * as XLSX from 'xlsx';
-
 import React, { useState, useEffect } from 'react';
+import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import BackToAdminDashboard from './BackToAdminDashboard';
-import { isAdmin, isDining } from './utils/permissions';
-
-
-
-
-const mapField = (target, label, value) => {
-  const cleanLabel = label.toLowerCase();
-
-  if (cleanLabel.includes('sales food - taxable')) target.salesTaxable = value;
-  if (cleanLabel.includes('sales tax collected')) target.salesTaxCollected = value;
-  if (cleanLabel.includes('cash over')) target.cashOver = value;
-  if (cleanLabel.includes('cash short')) target.cashShort = value;
-  if (cleanLabel.includes('dining dollars') && !cleanLabel.includes('mo')) target.diningDollars = value;
-  if (cleanLabel.includes('mo dining dollars') && !cleanLabel.includes('tax')) target.moDiningDollars = value;
-  if (cleanLabel.includes('mo dining dollars tax')) target.moDiningDollarsTax = value;
-  if (cleanLabel.includes('dining loyalty')) target.diningLoyalty = value;
-  if (cleanLabel.includes('department charges')) target.deptCharges = value;
-  if (cleanLabel.includes('reg credit sales tax')) target.regCreditSalesTax = value;
-  if (cleanLabel.includes('reg credit sales')) target.regCreditSales = value;
-  if (cleanLabel.includes('mo credit sales tax')) target.moCreditSalesTax = value;
-  if (cleanLabel.includes('mo credit sales')) target.moCreditSales = value;
-};
-
-
-
-
-const handleFileUpload = (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-
-  reader.onload = (event) => {
-    let values = {};
-    let text = '';
-
-    // Check file type
-    const isExcel = file.name.endsWith('.xlsx');
-
-    const mapField = (target, label, value) => {
-  const cleanLabel = label.toLowerCase();
-
-  if (cleanLabel.includes('mo credit sales tax')) {
-    target.moCreditSalesTax = value;
-  } else if (cleanLabel.includes('mo credit sales')) {
-    target.moCreditSales = value;
-  } else if (cleanLabel.includes('reg credit sales tax')) {
-    target.regCreditSalesTax = value;
-  } else if (cleanLabel.includes('reg credit sales')) {
-    target.regCreditSales = value;
-  } else if (cleanLabel.includes('mo dining dollars tax')) {
-    target.moDiningDollarsTax = value;
-  } else if (cleanLabel.includes('mo dining dollars')) {
-    target.moDiningDollars = value;
-  } else if (cleanLabel.includes('sales food - taxable')) {
-    target.salesTaxable = value;
-  } else if (cleanLabel.includes('sales tax collected')) {
-    target.salesTaxCollected = value;
-  } else if (cleanLabel.includes('cash over')) {
-    target.cashOver = value;
-  } else if (cleanLabel.includes('cash short')) {
-    target.cashShort = value;
-  } else if (cleanLabel.includes('dining loyalty')) {
-    target.diningLoyalty = value;
-  } else if (cleanLabel.includes('dining dollars')) {
-    target.diningDollars = value;
-  } else if (cleanLabel.includes('department charges')) {
-    target.deptCharges = value;
-  }
-};
-
-
-    setForm((prev) => ({ ...prev, ...values }));
-  };
-
-  if (file.name.endsWith('.xlsx')) {
-    reader.readAsArrayBuffer(file);
-  } else {
-    reader.readAsText(file);
-  }
-};
-
-
 
 function Section({ title, children }) {
   const [open, setOpen] = useState(false);
@@ -104,31 +19,55 @@ function Section({ title, children }) {
 }
 
 function RegattasForm() {
-// 🔐 Restrict access to Admins only
-  if (!isAdmin() && !isDining()) {
-  return (
-    <div className="p-6">
-      <p className="text-red-600 font-semibold text-lg">
-        🚫 Access Denied: Only Admins and Dining staff can access this page.
-      </p>
-    </div>
-  );
-}
-
-
-  
   const initialState = {
-    unit: 'Regattas', fiscalYear: '', transmittalNumber: '', workDate: '',
-    salesTaxable: '', checkSales: '', checkSalesTax: '', salesTaxCollected: '',
-    moSalesTaxable: '', moSalesTaxCollected: '', moDiningDollarsTax: '',
-    cashOver: '', cashShort: '', diningDollars: '', moDiningDollars: '',
-    deptCharges: '', diningLoyalty: '', totalCash: '', totalChecks: '',
-    regCreditSales: '', moCreditSales: '', regCreditSalesTax: '', moCreditSalesTax: ''
+    unit: 'Regattas',
+    fiscalYear: '',
+    transmittalNumber: '',
+    workDate: '',
+    salesTaxable: '',
+    checkSales: '',
+    checkSalesTax: '',
+    salesTaxCollected: '',
+    moSalesTaxable: '',
+    moSalesTaxCollected: '',
+    moDiningDollarsTax: '',
+    cashOver: '',
+    cashShort: '',
+    diningDollars: '',
+    moDiningDollars: '',
+    deptCharges: '',
+    diningLoyalty: '',
+    totalCash: '',
+    totalChecks: '',
+    regCreditSales: '',
+    moCreditSales: '',
+    regCreditSalesTax: '',
+    moCreditSalesTax: ''
   };
 
   const [form, setForm] = useState(initialState);
+  const [displayTotalCash, setDisplayTotalCash] = useState('');
+  const [manualSalesTaxable, setManualSalesTaxable] = useState(false);
 
-    const handleFileUpload = (e) => {
+  const mapField = (target, label, value) => {
+    const cleanLabel = label.toLowerCase();
+
+    if (cleanLabel.includes('mo credit sales tax')) target.moCreditSalesTax = value;
+    else if (cleanLabel.includes('mo credit sales')) target.moCreditSales = value;
+    else if (cleanLabel.includes('reg credit sales tax')) target.regCreditSalesTax = value;
+    else if (cleanLabel.includes('reg credit sales')) target.regCreditSales = value;
+    else if (cleanLabel.includes('mo dining dollars tax')) target.moDiningDollarsTax = value;
+    else if (cleanLabel.includes('mo dining dollars')) target.moDiningDollars = value;
+    else if (cleanLabel.includes('sales food - taxable')) target.salesTaxable = value;
+    else if (cleanLabel.includes('sales tax collected')) target.salesTaxCollected = value;
+    else if (cleanLabel.includes('cash over')) target.cashOver = value;
+    else if (cleanLabel.includes('cash short')) target.cashShort = value;
+    else if (cleanLabel.includes('dining loyalty')) target.diningLoyalty = value;
+    else if (cleanLabel.includes('dining dollars')) target.diningDollars = value;
+    else if (cleanLabel.includes('department charges')) target.deptCharges = value;
+  };
+
+  const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -154,11 +93,6 @@ function RegattasForm() {
       reader.readAsText(file);
     }
   };
-
-  
-const [displayTotalCash, setDisplayTotalCash] = useState('');
-const [manualSalesTaxable, setManualSalesTaxable] = useState(false);
-
 
 
 useEffect(() => {
@@ -279,11 +213,6 @@ useEffect(() => {
     setManualSalesTaxable(true);
   }
 };
-
-
-
-
-
 
   const handleClear = () => setForm(initialState);
   const toNumber = val => parseFloat(val) || 0;
@@ -598,70 +527,74 @@ useEffect(() => {
         </div>
       </Section>
 
-      <Section title="Credit Card Transactions">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-         <div className="flex items-center justify-between">
-  <input
-    name="regCreditSales"
-    type="number"
-    placeholder="Reg Credit Sales"
-    value={form.regCreditSales}
-    onChange={handleChange}
-    className="border rounded p-2 w-full"
-  />
-  {form.regCreditSales !== '' && (
-    <span className="ml-4 text-sm text-gray-600 font-semibold whitespace-nowrap">
-      Reg Credit Sales
-    </span>
-  )}
-</div>
-          <div className="flex items-center justify-between">
-  <input
-    name="regCreditSalesTax"
-    type="number"
-    placeholder="Reg Credit Sales Tax"
-    value={form.regCreditSalesTax}
-    onChange={handleChange}
-    className="border rounded p-2 w-full"
-  />
-  {form.regCreditSalesTax !== '' && (
-    <span className="ml-4 text-sm text-gray-600 font-semibold whitespace-nowrap">
-      Reg Credit Sales Tax
-    </span>
-  )}
-</div>
-          <div className="flex items-center justify-between">
-  <input
-    name="moCreditSales"
-    type="number"
-    placeholder="MO Credit Sales"
-    value={form.moCreditSales}
-    onChange={handleChange}
-    className="border rounded p-2 w-full"
-  />
-  {form.moCreditSales !== '' && (
-    <span className="ml-4 text-sm text-gray-600 font-semibold whitespace-nowrap">
-      MO Credit Sales
-    </span>
-  )}
-</div>
-          <div className="flex items-center justify-between">
-  <input
-    name="moCreditSalesTax"
-    type="number"
-    placeholder="MO Credit Sales Tax"
-    value={form.moCreditSalesTax}
-    onChange={handleChange}
-    className="border rounded p-2 w-full"
-  />
-  {form.moCreditSalesTax !== '' && (
-    <span className="ml-4 text-sm text-gray-600 font-semibold whitespace-nowrap">
-      MO Credit Sales Tax
-    </span>
-  )}
-</div>
-        </div>
-      </Section>
+<Section title="Credit Card Transactions">
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="relative">
+      <input
+        name="regCreditSales"
+        type="number"
+        placeholder="Reg Credit Sales"
+        value={form.regCreditSales}
+        onChange={handleChange}
+        className="border rounded p-2 w-full"
+      />
+      {form.regCreditSales !== '' && (
+        <span className="absolute top-2 right-3 text-sm text-gray-500 font-semibold">
+          Reg Credit Sales
+        </span>
+      )}
+    </div>
+
+    <div className="relative">
+      <input
+        name="regCreditSalesTax"
+        type="number"
+        placeholder="Reg Credit Sales Tax"
+        value={form.regCreditSalesTax}
+        onChange={handleChange}
+        className="border rounded p-2 w-full"
+      />
+      {form.regCreditSalesTax !== '' && (
+        <span className="absolute top-2 right-3 text-sm text-gray-500 font-semibold">
+          Reg Credit Sales Tax
+        </span>
+      )}
+    </div>
+
+    <div className="relative">
+      <input
+        name="moCreditSales"
+        type="number"
+        placeholder="MO Credit Sales"
+        value={form.moCreditSales}
+        onChange={handleChange}
+        className="border rounded p-2 w-full"
+      />
+      {form.moCreditSales !== '' && (
+        <span className="absolute top-2 right-3 text-sm text-gray-500 font-semibold">
+          MO Credit Sales
+        </span>
+      )}
+    </div>
+
+    <div className="relative">
+      <input
+        name="moCreditSalesTax"
+        type="number"
+        placeholder="MO Credit Sales Tax"
+        value={form.moCreditSalesTax}
+        onChange={handleChange}
+        className="border rounded p-2 w-full"
+      />
+      {form.moCreditSalesTax !== '' && (
+        <span className="absolute top-2 right-3 text-sm text-gray-500 font-semibold">
+          MO Credit Sales Tax
+        </span>
+      )}
+    </div>
+  </div>
+</Section>
+
 
       <Section title="Summary & Totals">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
