@@ -65,9 +65,6 @@ useEffect(() => {
   }
 
   // ✅ Then return your actual table below...
-}
-
-
 
  const handleQtyChange = (index, value) => {
   const updatedItems = [...items];
@@ -226,9 +223,11 @@ const handleBulkDelete = async () => {
 };
 
   const toggleSelect = (id) => {
-    setSelectedItems(prev =>
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-    );
+  setSelectedItems(prev =>
+    prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+  );
+}; // ✅ Fix: properly closes the toggleSelect function
+
 
 
   return (

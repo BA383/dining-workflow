@@ -10,11 +10,10 @@ import BackToInventoryDashboard from '../Components/BackToInventoryDashboard';
 import { isAdmin, isDining } from '../utils/permissions'; // adjust path as needed
 import { getCurrentUser } from '../utils/userSession';
 import QRCodeLabel from '../Components/QRCodeLabel';
+import jsPDF from 'jspdf';
 
 
-
-
-
+const { data, error } = await supabase.from('inventory').select('*');
 
 const uploadQRCodeToStorage = async (sku, dataUrl) => {
   try {
@@ -146,16 +145,17 @@ useEffect(() => {
 }, []);
 
 
+useEffect(() => {
+  const shouldFetch = user && selectedUnit;
+
+  if (shouldFetch) {
+    fetchItems(user);
+  }
+}, [user, selectedUnit]);
+
 if (!user) {
 return <p className="p-4 text-red-600">Loading user data...</p>;
 //}
-
-useEffect(() => {
-  // ✅ Only fetch when user is available and selectedUnit is set
-  if (user && selectedUnit) {
-    fetchItems(user);
-  }
-}, [user, selectedUnit]); // ✅ Include user in the dependency array
 
 
   let query = supabase.from('inventory').select('*');
@@ -187,6 +187,42 @@ useEffect(() => {
       Object.fromEntries(Object.keys(grouped).map(unit => [unit, true]))
     );
   }
+};
+
+const generatePdfWithQRCodes = async () => {
+  const pdf = new jsPDF();
+  let x = 10;
+  let y = 10;
+
+  for (const item of lastUploadedItems) {
+    try {
+      const qrDataUrl = await QRCode.toDataURL(item.sku);
+      pdf.addImage(qrDataUrl, 'PNG', x, y, 40, 40);
+
+      // Details below the QR
+      const details = [
+        `Name: ${item.name || 'Unnamed'}`,
+        `SKU: ${item.sku || '-'}`,
+        `Unit: ${item.unit || '-'}`,
+        `Location: ${item.location || '-'}`,
+        `Dining Unit: ${item.dining_unit || '-'}`
+      ];
+
+      details.forEach((line, i) => {
+        pdf.text(line, x, y + 50 + i * 6); // Slight vertical spacing per line
+      });
+
+      y += 90; // Move down for next item
+      if (y > 250) {
+        y = 10;
+        pdf.addPage();
+      }
+    } catch (err) {
+      console.error(`❌ Failed to generate QR for ${item.sku}`, err);
+    }
+  }
+
+  pdf.save('QR_Labels.pdf');
 };
 
 
@@ -430,7 +466,7 @@ const uploadToSupabase = async (rows) => {
       name: row['item name'] || row.name || '',
       sku: row['sku'] || '',
       category: row['category'] || '',
-      quantity,
+      quantity: qty, // ✅ use the actual defined variable
       unitPrice,
       extendedPrice: qty * unitPrice,
       expiration: row['expiration'] ? new Date(row['expiration']).toISOString().split('T')[0] : null,
@@ -479,6 +515,133 @@ console.log('Category in formatted upload:', formatted.map(f => f.category));
   const content = await zip.generateAsync({ type: 'blob' });
   saveAs(content, 'Inventory_QRCodes.zip');
 };
+
+
+
+const openQRCodeWindow = () => {
+  const newWindow = window.open('', '_blank');
+  if (!newWindow) {
+    alert('Pop-up blocked. Please allow pop-ups for this site.');
+    return;
+  }
+
+  newWindow.document.write(`
+    <html>
+      <head>
+        <title>QR Codes</title>
+        <style>
+          body { font-family: sans-serif; padding: 20px; }
+          .qr-label {
+            margin-bottom: 30px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            width: fit-content;
+          }
+          .qr-label img {
+            margin-top: 10px;
+            display: block;
+          }
+        </style>
+      </head>
+      <body>
+        <h2>📦 QR Code Labels for Uploaded Items</h2>
+        ${lastUploadedItems.map(item => `
+          <div class="qr-label">
+            <strong>${item.name || 'Unnamed Item'}</strong><br/>
+            <span><strong>SKU:</strong> ${item.sku}</span><br/>
+            <span><strong>Unit:</strong> ${item.unit || '-'}</span><br/>
+            <span><strong>Location:</strong> ${item.location || '-'}</span><br/>
+            <span><strong>Dining Unit:</strong> ${item.dining_unit || '-'}</span>
+            <img src="https://api.qrserver.com/v1/create-qr-code/?data=${item.sku}&size=120x120" alt="${item.sku}" />
+          </div>
+        `).join('')}
+      </body>
+    </html>
+  `);
+  newWindow.document.close();
+};
+
+
+
+
+const openQrPopup = (item) => {
+  const popup = window.open('', '_blank', 'width=400,height=550');
+  if (!popup) return;
+
+  popup.document.write(`
+    <html>
+      <head>
+        <title>QR Code for ${item.name || item.sku}</title>
+        <style>
+  body {
+    font-family: sans-serif;
+    text-align: center;
+    padding: 20px;
+    font-size: 14px;
+  }
+
+  h2 {
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+
+  img {
+    margin-bottom: 20px;
+    max-width: 200px;
+    height: auto;
+  }
+
+  p {
+    margin: 4px 0;
+  }
+
+  button {
+    margin-top: 20px;
+    padding: 8px 16px;
+    font-size: 14px;
+    background-color: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  button:hover {
+    background-color: #1e40af;
+  }
+
+  @media print {
+    button {
+      display: none; /* Hide print button when printing */
+    }
+  }
+</style>
+
+      </head>
+      <body>
+        <h2>${item.name || 'Unnamed Item'}</h2>
+        <img src="https://xsnvzidsrlrsgiqhbfaz.supabase.co/storage/v1/object/public/qrlabels/${item.qr_path}" alt="QR Code" />
+        <p><strong>SKU:</strong> ${item.sku}</p>
+        <p><strong>Unit:</strong> ${item.unit || 'N/A'}</p>
+        <p><strong>Location:</strong> ${item.location || 'N/A'}</p>
+        <p><strong>Dining Unit:</strong> ${item.dining_unit || 'N/A'}</p>
+
+        <button onclick="window.print()">🖨️ Print</button>
+      </body>
+    </html>
+  `);
+
+  popup.document.close();
+};
+
+
+
+
+
+
+
+
   const exportToExcel = () => {
     const worksheet = XLSX.utils.json_to_sheet(items);
     const workbook = XLSX.utils.book_new();
@@ -502,6 +665,7 @@ const renderChart = (data) => {
     qty_on_hand
   }));
 
+
   return (
     <ResponsiveContainer width="100%" height={200}>
       <BarChart data={chartData}>
@@ -516,8 +680,11 @@ const renderChart = (data) => {
 
 
 
+
+
 // ✅ This is now your main InventoryTable() component return:
 return (
+
   <div className="p-6">
     <BackToInventoryDashboard />
     <h2 className="text-xl font-bold mb-4">
@@ -559,34 +726,21 @@ return (
   <div ref={qrSectionRef} className="mt-10 border-t pt-6">
     <h2 className="text-xl font-semibold mb-4">📦 QR Code Labels for Uploaded Items</h2>
 
+    <button
+      onClick={openQRCodeWindow}
+      className="mb-4 bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
+    >
+      🖥️ Open QR Preview in New Window
+    </button>
 
-<button
-  onClick={() => window.print()}
-  className="mb-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
->
-  🖨️ Print All Labels
-</button>
-
-
-    
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-      {lastUploadedItems.map((item) => (
-        <div key={item.sku} className="p-4 border rounded-lg shadow bg-white">
-          <QRCodeLabel
-            sku={item.sku}
-            name={item.name}
-            unit={item.unit}
-            location={item.location}
-            diningUnit={item.dining_unit}
-          />
-        </div>
-      ))}
-    </div>
+    <button
+      onClick={generatePdfWithQRCodes}
+      className="mb-4 ml-4 bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+    >
+      📄 Generate PDF with QR Codes
+    </button>
   </div>
 )}
-
-
-
 
         {selectedUnit !== 'Administration' && (
           <input type="file" accept=".csv,.xlsx" onChange={handleFileUpload} className="border rounded p-2" />
@@ -634,14 +788,14 @@ return (
                           <td className="border p-2">{item.sku}</td>
   <td className="border p-2">
   {item.qr_path ? (
-    <a
-      href={`https://xsnvzidsrlrsgiqhbfaz.supabase.co/storage/v1/object/public/qrlabels/${item.qr_path}`}
-      target="_blank"
-      rel="noreferrer"
-      className="text-blue-600 underline"
-    >
-      View QR
-    </a>
+
+   <button
+  onClick={() => openQrPopup(item)}
+  className="text-blue-600 underline"
+>
+  View QR
+</button>
+
   ) : (
     <span className="text-gray-400">No QR</span>
   )}

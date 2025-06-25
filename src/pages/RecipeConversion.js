@@ -6,21 +6,14 @@ import { ClipboardList } from 'lucide-react';
 import { isAdmin, isDining } from '../utils/permissions'; // adjust path as needed
 
 function RecipeConversion() {
-if (!isAdmin() && !isDining()) {
-    return (
-      <div className="p-6">
-        <p className="text-red-600 font-semibold">🚫 Inventory is for Dining staff only.</p>
-      </div>
-    );
-  }
-
-
-  const unitOptions = ['ea', 'case', 'lbs', 'gallons', 'box', 'can', 'pack', 'tray'];
   const [inventoryItems, setInventoryItems] = useState([]);
   const [newRecipe, setNewRecipe] = useState({ name: '', yield: 0, items: [] });
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickItem, setQuickItem] = useState({ sku: '', name: '', unit: '', quantity: 1 });
 
+  const unitOptions = ['ea', 'case', 'lbs', 'gallons', 'box', 'can', 'pack', 'tray'];
+
+  
   useEffect(() => {
     fetchInventoryItems();
   }, []);
@@ -59,6 +52,14 @@ const fetchInventoryItems = async () => {
   }
 };
 
+
+if (!isAdmin() && !isDining()) {
+    return (
+      <div className="p-6">
+        <p className="text-red-600 font-semibold">🚫 Inventory is for Dining staff only.</p>
+      </div>
+    );
+  }
 
 
   const addIngredient = () => {

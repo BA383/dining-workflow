@@ -34,33 +34,23 @@ const isAdminUser = user?.role === 'admin';
 
 
 
-  // ✅ Permissions check AFTER user is loaded
-  if (!isAdmin() && !isDining()) {
-    return (
-      <div className="p-6">
-        <p className="text-red-600 font-semibold">🚫 Inventory is for Dining staff only.</p>
-      </div>
-    );
+ 
+// ✅ Fallback in case admin has no selected unit
+useEffect(() => {
+  if (isAdminUser && !selectedUnit) {
+    setSelectedUnit(user.unit);
   }
+}, [isAdminUser, user.unit, selectedUnit]);
 
-  // ✅ Fallback in case admin has no selected unit
-  useEffect(() => {
-    if (isAdminUser && !selectedUnit) {
-      setSelectedUnit(user.unit);
-    }
-  }, [isAdminUser, user.unit, selectedUnit]);
+// ✅ Fetch logs with RLS context — hook always called unconditionally
+useEffect(() => {
+  const fetchLogs = async () => {
+    if (!user?.role) return;
 
-  // ✅ Fetch logs with RLS context
-  useEffect(() => {
-const fetchLogs = async () => {
-  if (!user?.role) return; // ✅ Ensure role is loaded before anything
-
-  const isAdminUser = user.role === 'admin'; // ✅ Define it locally
-
-  await supabase.rpc('set_config', {
-    config_key: 'request.unit',
-    config_value: selectedUnit || 'Administration',
-  });
+    await supabase.rpc('set_config', {
+      config_key: 'request.unit',
+      config_value: selectedUnit || 'Administration',
+    });
 
   await supabase.rpc('set_config', {
     config_key: 'request.role',
@@ -87,6 +77,14 @@ const fetchLogs = async () => {
   }
 };
 
+ // ✅ Permissions check AFTER user is loaded
+  if (!isAdmin() && !isDining()) {
+    return (
+      <div className="p-6">
+        <p className="text-red-600 font-semibold">🚫 Inventory is for Dining staff only.</p>
+      </div>
+    );
+  }
 
     fetchLogs();
   }, [selectedUnit, user]);

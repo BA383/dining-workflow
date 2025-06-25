@@ -20,7 +20,8 @@ function InventoryReport() {
   const [unitFilter, setUnitFilter] = useState('');
   const [units, setUnits] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const rowsPerPage = 10;
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
 
   const isAdminUser = user?.role === 'admin'; // ✅ Safe use after `user` is defined
   const indexOfLastRow = currentPage * rowsPerPage;

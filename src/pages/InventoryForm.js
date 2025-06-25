@@ -29,22 +29,8 @@ const user = JSON.parse(localStorage.getItem('user') || '{}');
 };
 
 
-
 function InventoryForm() {
- // ✅ Check permissions immediately
-  if (!isAdmin() && !isDining()) {
-  return (
-    <div className="p-6">
-      <p className="text-red-600 font-semibold text-lg">
-        🚫 Access Denied: Only Admins and Dining staff can access this page.
-      </p>
-    </div>
-  );
-}
-
-
-
-  const user = JSON.parse(localStorage.getItem('user'));
+ const user = JSON.parse(localStorage.getItem('user'));
 
  const [form, setForm] = useState({
   barcode: '',
@@ -87,9 +73,11 @@ const uploadQRCodeLabel = async (element, barcode) => {
     return null;
   }
 };
-const labelRef = React.useRef();
 
 const [lastRegisteredItem, setLastRegisteredItem] = useState(null);
+const labelRef = React.useRef();
+
+
 
   const unitOptions = ['ea', 'case', 'lbs', 'gallons', 'box', 'can', 'pack', 'tray'];
   const categoryOptions = [
@@ -268,6 +256,18 @@ alert('✅ New inventory item registered.');
     setForm(prev => ({ ...prev, barcode }));
     console.log('📸 Barcode scanned in Register Form:', barcode);
   }, []);
+
+// ✅ Check permissions immediately
+  if (!isAdmin() && !isDining()) {
+  return (
+    <div className="p-6">
+      <p className="text-red-600 font-semibold text-lg">
+        🚫 Access Denied: Only Admins and Dining staff can access this page.
+      </p>
+    </div>
+  );
+}
+
 
   const handleDownloadLabel = async () => {
   if (!labelRef.current) return;

@@ -5,20 +5,12 @@ import { isAdmin, isDining } from '../utils/permissions'; // adjust path as need
 import { getCurrentUser, setRLSContext } from '../utils/userSession';
 
 function MenuProduction() {
- if (!isAdmin() && !isDining()) {
-    return (
-      <div className="p-6">
-        <p className="text-red-600 font-semibold">🚫 Inventory is for Dining staff only.</p>
-      </div>
-    );
-  }
-
-
   const [recipes, setRecipes] = useState([]);
   const [productionPlan, setProductionPlan] = useState([]);
   const [user, setUser] = useState({});
   const [selectedUnit, setSelectedUnit] = useState('');
   
+
 
   useEffect(() => {
   async function init() {
@@ -45,7 +37,13 @@ function MenuProduction() {
 }, []);
 
 
-
+if (!isAdmin() && !isDining()) {
+    return (
+      <div className="p-6">
+        <p className="text-red-600 font-semibold">🚫 Inventory is for Dining staff only.</p>
+      </div>
+    );
+  }
   
   const fetchRecipes = async (unit, role) => {
   let query = supabase.from('recipes').select('*');

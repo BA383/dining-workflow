@@ -7,6 +7,36 @@ import { Link } from 'react-router-dom';
 
 
 function ViewRecipes() {
+  const [recipes, setRecipes] = useState([]);
+  const [editingIndex, setEditingIndex] = useState(null);
+  const [editedRecipe, setEditedRecipe] = useState({ name: '', yield: 0 });
+  const [user, setUser] = useState({});
+  const [selectedUnit, setSelectedUnit] = useState('');
+
+  
+useEffect(() => {
+  async function init() {
+    let currentUser = await getCurrentUser();
+
+    // Fallback to localStorage if Supabase session is missing
+    if (!currentUser?.unit || !currentUser?.role) {
+      console.warn('⚠️ Falling back to localStorage');
+      currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    }
+
+    setUser(currentUser);
+    setSelectedUnit(currentUser?.unit || '');
+
+    if (currentUser?.unit && currentUser?.role) {
+      fetchRecipes(currentUser.unit, currentUser.role);
+    } else {
+      console.warn('❌ Missing unit or role – fetchRecipes skipped');
+    }
+  }
+
+  init();
+}, []);
+
 if (!isAdmin() && !isDining()) {
     return (
       <div className="p-6">
@@ -14,35 +44,6 @@ if (!isAdmin() && !isDining()) {
       </div>
     );
   }
-
-
-  const [recipes, setRecipes] = useState([]);
-  const [editingIndex, setEditingIndex] = useState(null);
-  const [editedRecipe, setEditedRecipe] = useState({ name: '', yield: 0 });
-  const [user, setUser] = useState({});
-  const [selectedUnit, setSelectedUnit] = useState('');
-
-  useEffect(() => {
-  async function fetchUser() {
-    const currentUser = await getCurrentUser();
-    setUser(currentUser);
-    setSelectedUnit(currentUser?.unit || '');
-  }
-  fetchUser();
-}, []);
-
-
-  useEffect(() => {
-  const u = JSON.parse(localStorage.getItem('user') || '{}');
-  setUser(u);
-
-  if (u.unit && u.role) {
-    fetchRecipes(u.unit, u.role); // ✅ Pass both unit and role
-  } else {
-    console.warn('❌ Missing unit or role in localStorage');
-  }
-}, []);
-
 
  const fetchRecipes = async (unit, role) => {
   await supabase.rpc('set_config', {

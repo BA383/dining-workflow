@@ -8,14 +8,6 @@ import { getCurrentUser, setRLSContext } from '../utils/userSession';
 
 
 function InventoryCheckInOut() {
-  if (!isAdmin() && !isDining()) {
-    return (
-      <div className="p-6">
-        <p className="text-red-600 font-semibold">🚫 Access Denied: Only Dining or Admin users can access this page.</p>
-      </div>
-    );
-  }
-
   const [action, setAction] = useState('checkin');
   const [items, setItems] = useState([]);
   const [form, setForm] = useState({
@@ -45,8 +37,6 @@ function InventoryCheckInOut() {
 }, []);
 
 
-
-
   const fetchInventory = useCallback(async () => {
 
   let query = supabase.from('inventory').select('*');
@@ -68,7 +58,6 @@ function InventoryCheckInOut() {
   }, [fetchInventory]);
 
 
-
   const handleScan = useCallback(async (barcode) => {
   const unitToQuery = (user.role === 'admin' ? selectedUnit : user.unit || '').trim();
 
@@ -87,6 +76,15 @@ function InventoryCheckInOut() {
     setFeedback('⚠️ This SKU is registered under multiple entries. Please ensure each SKU is uniquely assigned per unit.');
     return;
   }
+
+if (!isAdmin() && !isDining()) {
+    return (
+      <div className="p-6">
+        <p className="text-red-600 font-semibold">🚫 Access Denied: Only Dining or Admin users can access this page.</p>
+      </div>
+    );
+  }
+
 
   const item = data[0];
 

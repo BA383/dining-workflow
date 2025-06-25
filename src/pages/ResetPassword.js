@@ -11,6 +11,18 @@ function ResetPassword() {
       password: newPassword,
     });
 
+
+const {
+  data: { session },
+  error: sessionError,
+} = await supabase.auth.getSession();
+
+if (sessionError || !session) {
+  console.error('❌ Failed to get session:', sessionError?.message);
+  return;
+}
+
+
     const { data: profile, error: profileError } = await supabase
   .from('profiles')
   .select('role, unit')
@@ -21,6 +33,7 @@ if (!profile || profileError) {
   alert('Password updated, but no profile found. Please contact an admin.');
   return;
 }
+
 
 // ✅ Store enriched user object
 const enrichedUser = {

@@ -8,15 +8,6 @@ import { getCurrentUser, setRLSContext } from '../utils/userSession';
 
 
 function GeneralReport() {
-  // 🔐 Restrict access to Admins only
-  if (!isAdmin()) {
-    return (
-      <div className="p-6">
-        <p className="text-red-600 font-semibold">🚫 Access Denied: Admins only.</p>
-      </div>
-    );
-  }
-
   const [inventory, setInventory] = useState([]);
   const [lowStock, setLowStock] = useState([]);
   const [totalsByUnit, setTotalsByUnit] = useState({});
@@ -43,7 +34,8 @@ function GeneralReport() {
     return new Date().toISOString().split('T')[0]; // Today
   });
 
-  useEffect(() => {
+  
+useEffect(() => {
   async function fetchUser() {
     const currentUser = await getCurrentUser();
     setUser(currentUser);
@@ -53,13 +45,16 @@ function GeneralReport() {
 }, []);
 
 
-
-
-  useEffect(() => {
-    if (isAdmin) {
-      fetchAllInventoryInsights();
+// ✅ This useEffect runs once user is set
+useEffect(() => {
+  const runFetch = async () => {
+    if (user?.role === 'admin') {
+      await fetchAllInventoryInsights();
     }
-  }, [isAdmin]);
+  };
+  runFetch();
+}, [user]);
+
 
   const fetchAllInventoryInsights = async () => {
     const { data: inventoryData, error: inventoryError } = await supabase
@@ -80,8 +75,11 @@ const { data: productionLogs } = await supabase
 
 const { data: wasteLogs } = await supabase
   .from('inventory_logs')
-  .select('dining_unit, quantity')
-  .eq('action', 'waste');
+  .select('dining_unit, quantity, timestamp')
+  .eq('action', 'waste')
+  .gte('timestamp', startDate)
+  .lte('timestamp', endDate);
+
 
 const wasteByUnit = {};
 
@@ -90,13 +88,28 @@ wasteLogs?.forEach(log => {
   wasteByUnit[log.dining_unit] += Number(log.quantity || 0);
 });
 
+
+
+// 🔐 Restrict access to Admins only
+  if (!isAdmin()) {
+    return (
+      <div className="p-6">
+        <p className="text-red-600 font-semibold">🚫 Access Denied: Admins only.</p>
+      </div>
+    );
+  }
+
+
 setWasteSummary(wasteByUnit);
 
 
 const { data: transferLogs } = await supabase
   .from('inventory_logs')
-  .select('dining_unit, target_unit, quantity')
-  .eq('action', 'transfer');
+  .select('dining_unit, target_unit, quantity, timestamp')
+  .eq('action', 'transfer')
+  .gte('timestamp', startDate)
+  .lte('timestamp', endDate);
+
 
 const transferMap = {};
 
@@ -210,33 +223,41 @@ setChartData({
 });
 
 
-    // Top Item This Month
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-    const { data: logs, error: logsError } = await supabase
-      .from('inventory_logs')
-      .select('sku, name, quantity, dining_unit, timestamp, action')
-      .eq('action', 'checkin')
-      .gte('timestamp', startOfMonth.toISOString());
+    // Top Item This Month (active inventory only)
+const startOfMonth = new Date();
+startOfMonth.setDate(1);
+startOfMonth.setHours(0, 0, 0, 0);
 
-    if (!logsError && logs) {
-      const map = {};
-      logs.forEach(log => {
-        const key = `${log.sku}-${log.dining_unit}`;
-        if (!map[key]) {
-          map[key] = {
-            sku: log.sku,
-            name: log.name,
-            unit: log.dining_unit,
-            totalCheckins: 0
-          };
-        }
-        map[key].totalCheckins += parseFloat(log.quantity) || 0;
-      });
-      const sorted = Object.values(map).sort((a, b) => b.totalCheckins - a.totalCheckins);
-      setTopItem(sorted[0] || null);
+// Get current active SKUs from inventoryData
+const activeSKUs = new Set(inventoryData.map(item => item.sku));
+
+const { data: logs, error: logsError } = await supabase
+  .from('inventory_logs')
+  .select('sku, name, quantity, dining_unit, timestamp, action')
+  .eq('action', 'checkin')
+  .gte('timestamp', startOfMonth.toISOString());
+
+if (!logsError && logs) {
+  const map = {};
+  logs.forEach(log => {
+    if (!activeSKUs.has(log.sku)) return; // ❌ Skip deleted/inactive items
+
+    const key = `${log.sku}-${log.dining_unit}`;
+    if (!map[key]) {
+      map[key] = {
+        sku: log.sku,
+        name: log.name,
+        unit: log.dining_unit,
+        totalCheckins: 0
+      };
     }
+    map[key].totalCheckins += parseFloat(log.quantity) || 0;
+  });
+
+  const sorted = Object.values(map).sort((a, b) => b.totalCheckins - a.totalCheckins);
+  setTopItem(sorted[0] || null);
+}
+
 
     // Aging Inventory (no activity in 30+ days)
     // Aging Inventory (no activity in 30+ days)
@@ -272,239 +293,217 @@ if (!logsAllError && logsAll) {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <BackToAdminDashboard />
-      <h1 className="text-3xl font-bold mb-6 text-blue-900">Director's Report Snapshot</h1>
 
       {!isAdmin ? (
         <p className="text-red-600">Access Denied: This report is only visible to administrators.</p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-        
-          
-<div className="mb-6">
-  <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 mb-1">
-    Filter Activity by Date Range:
-  </label>
-  <div className="flex gap-2">
-    <input
-      type="date"
-      className="border border-gray-300 rounded p-2 text-sm"
-      value={startDate}
-      onChange={(e) => setStartDate(e.target.value)}
-    />
-    <input
-      type="date"
-      className="border border-gray-300 rounded p-2 text-sm"
-      value={endDate}
-      onChange={(e) => setEndDate(e.target.value)}
-    />
-    <button
-      onClick={fetchAllInventoryInsights}
-      className="ml-2 px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
-    >
-      Apply
-    </button>
-  </div>
-</div>
+        <>
+          <h1 className="text-3xl font-bold mb-6 text-blue-900">Director's Report Snapshot</h1>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+            {/* Date Range Filter */}
+            <div className="mb-6">
+              <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 mb-1">
+                Filter Activity by Date Range:
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  className="border border-gray-300 rounded p-2 text-sm"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+                <input
+                  type="date"
+                  className="border border-gray-300 rounded p-2 text-sm"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+                <button
+                  onClick={fetchAllInventoryInsights}
+                  className="ml-2 px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
 
+            {/* Focus Area Selector */}
+            <div className="mb-6">
+              <label htmlFor="topicBlockSelector" className="block text-sm font-medium text-gray-700 mb-1">
+                Executive Focus Area:
+              </label>
+              <select
+                id="topicBlockSelector"
+                value={selectedTopicBlock}
+                onChange={(e) => setSelectedTopicBlock(e.target.value)}
+                className="p-2 border border-gray-300 rounded shadow-sm text-sm"
+              >
+                <option value="inventory">💰 Total Inventory Value by Unit</option>
+                <option value="foodCost">📉 Food Cost Analysis</option>
+                <option value="waste">🗑️ Waste Management</option>
+                <option value="ingredientUsage">🧑‍🍳 Ingredient Usage by Unit</option>
+                <option value="transfer">🔁 Transfer Report</option>
+                <option value="labor">🧍 Labor Cost</option>
+                <option value="pnl">📊 Profit & Loss Overview</option>
+              </select>
+            </div>
 
-
-<div className="mb-6">
-  <label htmlFor="topicBlockSelector" className="block text-sm font-medium text-gray-700 mb-1">
-    Executive Focus Area:
-  </label>
-  <select
-    id="topicBlockSelector"
-    value={selectedTopicBlock}
-    onChange={(e) => setSelectedTopicBlock(e.target.value)}
-    className="p-2 border border-gray-300 rounded shadow-sm text-sm"
-  >
-    <option value="inventory">💰 Total Inventory Value by Unit</option>
-    <option value="foodCost">📉 Food Cost Analysis</option>
-    <option value="waste">🗑️ Waste Management</option>
-    <option value="ingredientUsage">🧑‍🍳 Ingredient Usage by Unit</option>
-    <option value="transfer">🔁 Transfer Report</option>
-    <option value="labor">🧍 Labor Cost</option>
-    <option value="pnl">📊 Profit & Loss Overview</option>
-  </select>
-</div>
-
-
-          {selectedTopicBlock === 'inventory' && (
-  <div className="bg-white shadow-md rounded p-4">
-    <h2 className="text-xl font-semibold mb-2 text-gray-700">💰 Total Inventory Value by Unit</h2>
-    <ul className="text-sm text-gray-700">
-      {Object.entries(totalsByUnit).map(([unit, value]) => (
-        <li key={unit}>
-          <strong>{unit}:</strong> ${value.toFixed(2)}
-        </li>
-      ))}
-    </ul>
-  </div>
-)}
-
-{selectedTopicBlock === 'foodCost' && (
-  <div className="bg-white shadow-md rounded p-4">
-    <h2 className="text-xl font-semibold mb-2 text-gray-700">💰 Food Cost Analysis</h2>
-    <p className="text-sm text-gray-500">Tracks cost of goods sold vs sales revenue.</p>
-    <p className="mt-2 text-blue-600">[Placeholder for Food Cost % and Charts]</p>
-  </div>
-)}
-
-{selectedTopicBlock === 'waste' && (
-  <div className="bg-white shadow-md rounded p-4 col-span-full">
-    <h2 className="text-xl font-semibold mb-2 text-gray-700">🗑️ Waste Summary by Unit</h2>
-    {Object.keys(wasteSummary).length === 0 ? (
-      <p className="text-sm text-green-600">No waste activity recorded.</p>
-    ) : (
-      <ul className="text-sm text-gray-800">
-        {Object.entries(wasteSummary).map(([unit, qty]) => (
-          <li key={unit}><strong>{unit}</strong>: {qty} items wasted</li>
-        ))}
-      </ul>
-    )}
-  </div>
-)}
-
-{selectedTopicBlock === 'ingredientUsage' && (
-  <div className="bg-white shadow-md rounded p-4 col-span-full">
-    <h2 className="text-xl font-semibold mb-2 text-gray-700">🧑‍🍳 Ingredient Usage by Unit</h2>
-    {Object.keys(ingredientUsage).length === 0 ? (
-      <p className="text-sm text-gray-500">No ingredient usage recorded for this period.</p>
-    ) : (
-      Object.entries(ingredientUsage).map(([unit, skuMap]) => (
-        <div key={unit} className="mb-3">
-          <h3 className="text-md font-bold text-blue-700">{unit}</h3>
-          <ul className="text-sm text-gray-800">
-            {Object.entries(skuMap).map(([sku, qty]) => (
-              <li key={sku}>
-                <strong>{sku}</strong>: {qty.toFixed(2)} units used
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))
-    )}
-  </div>
-)}
-
-
-{selectedTopicBlock === 'transfer' && (
-  <div className="bg-white shadow-md rounded p-4 col-span-full">
-    <h2 className="text-xl font-semibold mb-2 text-gray-700">🔁 Transfers Between Units</h2>
-    {Object.keys(transferSummary).length === 0 ? (
-      <p className="text-sm text-gray-500">No transfers logged yet.</p>
-    ) : (
-      <ul className="text-sm text-gray-800">
-        {Object.entries(transferSummary).map(([route, qty]) => (
-          <li key={route}><strong>{route}</strong>: {qty} items transferred</li>
-        ))}
-      </ul>
-    )}
-  </div>
-)}
-
-{selectedTopicBlock === 'production' && (
-  <div className="bg-white shadow-md rounded p-4 col-span-full">
-    <h2 className="text-xl font-semibold mb-2 text-gray-700">🍽️ Menu Production Output by Unit</h2>
-    {Object.keys(productionSummary).length === 0 ? (
-      <p className="text-sm text-gray-500">No production logs found for this date range.</p>
-    ) : (
-      Object.entries(productionSummary).map(([unit, logs]) => (
-        <div key={unit} className="mb-3">
-          <h3 className="text-md font-bold text-blue-700">{unit}</h3>
-          <ul className="text-sm text-gray-800">
-            {logs.map((log, i) => (
-              <li key={i}>
-                {log.recipe_name} – {log.servings_prepared} servings on {new Date(log.timestamp).toLocaleDateString()}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))
-    )}
-  </div>
-)}
-
-
-
-{selectedTopicBlock === 'labor' && (
-  <div className="bg-white shadow-md rounded p-4">
-    <h2 className="text-xl font-semibold mb-2 text-gray-700">🧍 Labor Cost</h2>
-    <p className="text-sm text-gray-500">Compares labor hours/wages against sales by unit.</p>
-    <p className="mt-2 text-blue-600">[Placeholder for Labor vs Sales Comparison]</p>
-  </div>
-)}
-
-{selectedTopicBlock === 'pnl' && (
-  <div className="col-span-full bg-white shadow-md rounded p-4">
-    <h2 className="text-xl font-semibold mb-2 text-gray-700">📊 Profit & Loss Overview</h2>
-    <p className="text-sm text-gray-500">Overall summary of revenues, costs, and net profit across operations.</p>
-    <p className="mt-2 text-blue-600">[Placeholder for P&L Breakdown and Trend Graph]</p>
-  </div>
-)}
-
-
-          {/* 🔻 Low Stock */}
-          <div className="bg-white shadow-md rounded p-4 col-span-full">
-            <h2 className="text-xl font-semibold mb-2 text-red-600">🔻 Low Stock Alerts</h2>
-            {lowStock.length === 0 ? (
-              <p className="text-sm text-green-600">All items above reorder level.</p>
-            ) : (
-              <>
-                <p className="text-sm text-gray-600 mb-2">{lowStock.length} items below reorder threshold:</p>
-                <ul className="text-sm text-red-700">
-  {lowStock.slice(0, 5).map((item, idx) => (
-    <li key={idx}>
-      {item.name} ({item.sku}) in <strong>{item.dining_unit}</strong> – Qty: {item.qty_on_hand} / Reorder: {item.reorder_level}
-    </li>
-  ))}
-</ul>
-
-              </>
+            {/* Inventory Value */}
+            {selectedTopicBlock === 'inventory' && (
+              <div className="bg-white shadow-md rounded p-4">
+                <h2 className="text-xl font-semibold mb-2 text-gray-700">💰 Total Inventory Value by Unit</h2>
+                <ul className="text-sm text-gray-700">
+                  {Object.entries(totalsByUnit).map(([unit, value]) => (
+                    <li key={unit}>
+                      <strong>{unit}:</strong> ${value.toFixed(2)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
-          </div>
 
-          {/* 🏆 Top Item This Month */}
-          <div className="bg-white shadow-md rounded p-4">
-            <h2 className="text-xl font-semibold mb-2 text-gray-700">🏆 Top Item This Month</h2>
-            {topItem ? (
-              <p className="text-sm text-gray-700">
-                <strong>{topItem.name}</strong> ({topItem.sku}) in <strong>{topItem.unit}</strong><br />
-                Total Check-ins: {topItem.totalCheckins}
-              </p>
-            ) : (
-              <p className="text-sm text-gray-500">No check-in data available yet this month.</p>
+            {/* Food Cost */}
+            {selectedTopicBlock === 'foodCost' && (
+              <div className="bg-white shadow-md rounded p-4">
+                <h2 className="text-xl font-semibold mb-2 text-gray-700">💰 Food Cost Analysis</h2>
+                <p className="text-sm text-gray-500">Tracks cost of goods sold vs sales revenue.</p>
+                <p className="mt-2 text-blue-600">[Placeholder for Food Cost % and Charts]</p>
+              </div>
             )}
-          </div>
 
-          {/* 📉 Aging Inventory */}
-          <div className="bg-white shadow-md rounded p-4">
-            <h2 className="text-xl font-semibold mb-2 text-gray-700">📉 Aging Inventory</h2>
-            {agingItems.length === 0 ? (
-              <p className="text-sm text-green-600">All items have recent activity.</p>
-            ) : (
-              <ul className="text-sm text-gray-700">
-                {agingItems.map((item, idx) => (
-                  <li key={idx}>
-                    {item.name} ({item.sku}) – {item.daysInactive} days inactive
-                  </li>
-                ))}
-              </ul>
+            {/* Waste Summary */}
+            {selectedTopicBlock === 'waste' && (
+              <div className="bg-white shadow-md rounded p-4 col-span-full">
+                <h2 className="text-xl font-semibold mb-2 text-gray-700">🗑️ Waste Summary by Unit</h2>
+                {Object.keys(wasteSummary).length === 0 ? (
+                  <p className="text-sm text-green-600">No waste activity recorded.</p>
+                ) : (
+                  <ul className="text-sm text-gray-800">
+                    {Object.entries(wasteSummary).map(([unit, qty]) => (
+                      <li key={unit}><strong>{unit}</strong>: {qty} items wasted</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
-          </div>
 
-          {/* 📈 Inventory Trend Chart */}
-          <div className="bg-white shadow-md rounded p-4 col-span-full">
-            <h2 className="text-xl font-semibold mb-2 text-gray-700">📈 Inventory Value Trend (4-Week)</h2>
-            {chartData ? (
-              <Line data={chartData} />
-            ) : (
-              <p className="text-sm text-gray-500">Loading trend data...</p>
+            {/* Ingredient Usage */}
+            {selectedTopicBlock === 'ingredientUsage' && (
+              <div className="bg-white shadow-md rounded p-4 col-span-full">
+                <h2 className="text-xl font-semibold mb-2 text-gray-700">🧑‍🍳 Ingredient Usage by Unit</h2>
+                {Object.keys(ingredientUsage).length === 0 ? (
+                  <p className="text-sm text-gray-500">No ingredient usage recorded for this period.</p>
+                ) : (
+                  Object.entries(ingredientUsage).map(([unit, skuMap]) => (
+                    <div key={unit} className="mb-3">
+                      <h3 className="text-md font-bold text-blue-700">{unit}</h3>
+                      <ul className="text-sm text-gray-800">
+                        {Object.entries(skuMap).map(([sku, qty]) => (
+                          <li key={sku}>
+                            <strong>{sku}</strong>: {qty.toFixed(2)} units used
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))
+                )}
+              </div>
             )}
-          </div>
 
-        </div>
+            {/* Transfers */}
+            {selectedTopicBlock === 'transfer' && (
+              <div className="bg-white shadow-md rounded p-4 col-span-full">
+                <h2 className="text-xl font-semibold mb-2 text-gray-700">🔁 Transfers Between Units</h2>
+                {Object.keys(transferSummary).length === 0 ? (
+                  <p className="text-sm text-gray-500">No transfers logged yet.</p>
+                ) : (
+                  <ul className="text-sm text-gray-800">
+                    {Object.entries(transferSummary).map(([route, qty]) => (
+                      <li key={route}><strong>{route}</strong>: {qty} items transferred</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {/* Labor */}
+            {selectedTopicBlock === 'labor' && (
+              <div className="bg-white shadow-md rounded p-4">
+                <h2 className="text-xl font-semibold mb-2 text-gray-700">🧍 Labor Cost</h2>
+                <p className="text-sm text-gray-500">Compares labor hours/wages against sales by unit.</p>
+                <p className="mt-2 text-blue-600">[Placeholder for Labor vs Sales Comparison]</p>
+              </div>
+            )}
+
+            {/* Profit & Loss */}
+            {selectedTopicBlock === 'pnl' && (
+              <div className="col-span-full bg-white shadow-md rounded p-4">
+                <h2 className="text-xl font-semibold mb-2 text-gray-700">📊 Profit & Loss Overview</h2>
+                <p className="text-sm text-gray-500">Overall summary of revenues, costs, and net profit across operations.</p>
+                <p className="mt-2 text-blue-600">[Placeholder for P&L Breakdown and Trend Graph]</p>
+              </div>
+            )}
+
+            {/* Low Stock Alerts */}
+            <div className="bg-white shadow-md rounded p-4 col-span-full">
+              <h2 className="text-xl font-semibold mb-2 text-red-600">🔻 Low Stock Alerts</h2>
+              {lowStock.length === 0 ? (
+                <p className="text-sm text-green-600">All items above reorder level.</p>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-600 mb-2">{lowStock.length} items below reorder threshold:</p>
+                  <ul className="text-sm text-red-700">
+                    {lowStock.slice(0, 5).map((item, idx) => (
+                      <li key={idx}>
+                        {item.name} ({item.sku}) in <strong>{item.dining_unit}</strong> – Qty: {item.qty_on_hand} / Reorder: {item.reorder_level}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+
+            {/* Top Item */}
+            <div className="bg-white shadow-md rounded p-4">
+              <h2 className="text-xl font-semibold mb-2 text-gray-700">🏆 Top Item This Month</h2>
+              {topItem ? (
+                <p className="text-sm text-gray-700">
+                  <strong>{topItem.name}</strong> ({topItem.sku}) in <strong>{topItem.unit}</strong><br />
+                  Total Check-ins: {topItem.totalCheckins}
+                </p>
+              ) : (
+                <p className="text-sm text-gray-500">No check-in data available yet this month.</p>
+              )}
+            </div>
+
+            {/* Aging Inventory */}
+            <div className="bg-white shadow-md rounded p-4">
+              <h2 className="text-xl font-semibold mb-2 text-gray-700">📉 Aging Inventory</h2>
+              {agingItems.length === 0 ? (
+                <p className="text-sm text-green-600">All items have recent activity.</p>
+              ) : (
+                <ul className="text-sm text-gray-700">
+                  {agingItems.map((item, idx) => (
+                    <li key={idx}>
+                      {item.name} ({item.sku}) – {item.daysInactive} days inactive
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* Trend Chart */}
+            <div className="bg-white shadow-md rounded p-4 col-span-full">
+              <h2 className="text-xl font-semibold mb-2 text-gray-700">📈 Inventory Value Trend (4-Week)</h2>
+              {chartData ? (
+                <Line data={chartData} />
+              ) : (
+                <p className="text-sm text-gray-500">Loading trend data...</p>
+              )}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

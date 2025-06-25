@@ -6,15 +6,6 @@ import BackToInventoryDashboard from '../Components/BackToInventoryDashboard';
 import { getCurrentUser, setRLSContext } from '../utils/userSession';
 
 function WasteAndTransferForm({ user }) {
-if (!isAdmin() && !isDining()) {
-    return (
-      <div className="p-6">
-        <p className="text-red-600 font-semibold">🚫 Inventory is for Dining staff only.</p>
-      </div>
-    );
-  }
-
-
   const [form, setForm] = useState({
     sku: '',
     name: '',
@@ -27,7 +18,13 @@ if (!isAdmin() && !isDining()) {
 
   const diningUnit = user?.unit || 'Unknown';
 
-  
+  if (!isAdmin() && !isDining()) {
+    return (
+      <div className="p-6">
+        <p className="text-red-600 font-semibold">🚫 Inventory is for Dining staff only.</p>
+      </div>
+    );
+  }
 
 
 const handleSubmit = async (e) => {
