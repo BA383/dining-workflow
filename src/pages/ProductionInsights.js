@@ -24,33 +24,26 @@ function ProductionInsights() {
   };
 
   useEffect(() => {
-    async function init() {
-      const currentUser = await getCurrentUser();
-      if (!currentUser) {
-        console.error('⚠️ No current user found');
-        return;
-      }
+  async function init() {
+    const currentUser = await getCurrentUser();
 
-      setUser(currentUser);
+    await supabase.rpc('set_config', {
+      config_key: 'request.unit',
+      config_value: currentUser.unit || 'admin', // always set something
+      is_local: false
+    });
 
-if (currentUser.role !== 'admin') {
-  await supabase.rpc('set_config', {
-    config_key: 'request.unit',
-    config_value: currentUser.unit
-  });
+    await supabase.rpc('set_config', {
+      config_key: 'request.role',
+      config_value: currentUser.role || 'admin',
+      is_local: false
+    });
 
-  await supabase.rpc('set_config', {
-    config_key: 'request.role',
-    config_value: currentUser.role
-  });
-}
+    fetchLogs(currentUser);
+  }
 
-fetchLogs(currentUser);
-
-    }
-
-    init();
-  }, []);
+  init();
+}, []);
 
   const fetchLogs = async (user) => {
     let query = supabase.from('production_logs').select('*');
@@ -176,6 +169,7 @@ fetchLogs(currentUser);
                     <th className="p-2 border">Servings</th>
                     <th className="p-2 border">Total Cost</th>
                     <th className="p-2 border">Cost/Serving</th>
+                    <th className="p-2 border">Variance</th>
                     <th className="p-2 border">Date</th>
                   </tr>
                 </thead>
@@ -192,6 +186,21 @@ fetchLogs(currentUser);
                             ? log.total_cost / log.servings_prepared
                             : 0
                         )}
+                      </td>
+                      <td
+                         className={`p-2 border ${
+                         log.expected_servings
+                         ? log.servings_prepared > log.expected_servings
+                         ? 'text-green-600'
+                         : log.servings_prepared < log.expected_servings
+                         ? 'text-red-600'
+                         : 'text-gray-700'
+                         : ''
+                         }`}
+                          >
+                         {log.expected_servings
+                         ? log.servings_prepared - log.expected_servings
+                         : '—'}
                       </td>
                       <td className="p-2 border">
                         {log.timestamp ? new Date(log.timestamp).toLocaleDateString() : '—'}

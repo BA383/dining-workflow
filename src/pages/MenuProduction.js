@@ -34,6 +34,16 @@ function MenuProduction() {
     return <div className="p-6 text-red-600 font-semibold">🚫 Inventory is for Dining staff only.</div>;
   }
 
+
+const calculateBatchCost = (ingredients, multiplier) => {
+  return ingredients.reduce((total, ing) => {
+    const unitPrice = ing.unitPrice || 0;
+    return total + unitPrice * ing.quantity * multiplier;
+  }, 0);
+};
+
+
+
   const fetchRecipes = async (unit, role) => {
     let query = supabase.from('recipes').select('*');
     if (role !== 'admin') query = query.eq('dining_unit', unit);
@@ -83,15 +93,21 @@ function MenuProduction() {
         batchCost += unitCost * ing.quantity * item.multiplier;
       }
 
-      batchCost = Number(batchCost.toFixed(2));
+console.log('Logging cost for:', item.name, 'batchCost:', batchCost, 'items:', item.items);
+
+
+     batchCost = calculateBatchCost(item.items, servings / item.yield);
+     batchCost = Number(batchCost.toFixed(2));
 
       logs.push({
-        recipe_name: item.name,
-        servings_prepared: servings,
-        dining_unit: selectedUnit,
-        total_cost: batchCost,
-        timestamp: new Date().toISOString()
-      });
+  recipe_name: item.name,
+  servings_prepared: servings,
+  expected_servings: item.yield || null, // 👈 use recipe yield as expected servings
+  dining_unit: selectedUnit,
+  total_cost: batchCost,
+  timestamp: new Date().toISOString()
+    });
+
 
       for (const ing of ingredients) {
         const usedQty = ing.quantity * item.multiplier;
