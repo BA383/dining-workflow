@@ -27,9 +27,7 @@ import AdminUserManager from './pages/AdminUserManager';
 import ResetPassword from './pages/ResetPassword';
 import RunEOMInventory from './pages/RunEOMInventory';
 import ProductionInsights from './pages/ProductionInsights';
-
-
-
+import InvoiceLog from './pages/InvoiceLog'; // adjust path if needed
 
 
 
@@ -113,11 +111,18 @@ function AppContent() {
     <p className="text-xs text-gray-300 mb-2">Admin Tools</p>
     <li>
       <Link
-        to="/admin/users"
-        className="block bg-blue-800 text-white px-3 py-2 rounded hover:bg-blue-700"
-      >
-        Manage Users
-      </Link>
+  to="/admin/users"
+  className="block bg-blue-800 text-white px-3 py-2 rounded hover:bg-blue-700"
+>
+  Manage Users
+</Link>
+
+<Link
+  to="/invoice-log"
+  className="block bg-blue-800 text-white px-3 py-2 rounded hover:bg-blue-700 mt-2"
+>
+  Invoice Log
+</Link>
     </li>
   </>
 )}
@@ -196,6 +201,7 @@ function AppContent() {
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/run-eom-inventory" element={<RunEOMInventory />} />
             <Route path="/production-insights" element={<ProductionInsights />} />
+            <Route path="/invoice-log" element={<InvoiceLog />} />
           </Routes>
         </main>
       </div>
