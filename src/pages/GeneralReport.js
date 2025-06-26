@@ -21,6 +21,9 @@ function GeneralReport() {
   const [ingredientUsage, setIngredientUsage] = useState({});
   const [user, setUser] = useState({});
   const [selectedUnit, setSelectedUnit] = useState('');
+  
+  const [topRecipes, setTopRecipes] = useState([]);
+
 
   const isAdminUser = user?.role === 'admin'; // ✅ Safely check after user is initialized
 
@@ -71,7 +74,14 @@ const { data: productionLogs } = await supabase
   .lte('timestamp', endDate);
 
 
-      
+    // 🍳 Fetch all recipes with ingredients
+const { data: allRecipes } = await supabase
+  .from('recipes')
+  .select('name, items'); // `items` = [{ sku, quantity, unit }]
+  
+  
+
+
 
 const { data: wasteLogs } = await supabase
   .from('inventory_logs')
@@ -127,37 +137,26 @@ setTransferSummary(transferMap);
 
 
 
-    const productionByUnit = {};
+    
 
-productionLogs?.forEach(log => {
-  if (!productionByUnit[log.dining_unit]) {
-    productionByUnit[log.dining_unit] = [];
-  }
-  productionByUnit[log.dining_unit].push(log);
-});
-
-setProductionSummary(productionByUnit); // ⬅️ Add new state at the top: const [productionSummary, setProductionSummary] = useState({});
-
-console.log('✅ Production Summary:', productionSummary);
-
-
-
-// 🍳 Fetch all recipes with ingredients
-const { data: allRecipes } = await supabase
-  .from('recipes')
-  .select('name, items'); // `items` = [{ sku, quantity, unit }]
-
-// Map recipes by name for fast lookup
+// 🍳 Enhanced: Build recipe map + production summary + top recipes
 const recipeMap = {};
 allRecipes?.forEach(r => {
   recipeMap[r.name] = r.items || [];
 });
 
-// Compute usage by dining_unit
 const usageMap = {};
+const productionByUnit = {};
+const recipeCountMap = {};
 
 productionLogs?.forEach(log => {
   const ingredients = recipeMap[log.recipe_name] || [];
+
+  // Summary of all production logs by unit
+  if (!productionByUnit[log.dining_unit]) productionByUnit[log.dining_unit] = [];
+  productionByUnit[log.dining_unit].push(log);
+
+  // Ingredient usage tracking
   ingredients.forEach(ing => {
     const totalUsed = (Number(ing.quantity) || 0) * (Number(log.servings_prepared) || 0);
 
@@ -166,9 +165,20 @@ productionLogs?.forEach(log => {
 
     usageMap[log.dining_unit][ing.sku] += totalUsed;
   });
+
+  // Track top recipes by frequency
+  const key = `${log.recipe_name}-${log.dining_unit}`;
+  if (!recipeCountMap[key]) {
+    recipeCountMap[key] = { name: log.recipe_name, unit: log.dining_unit, total: 0 };
+  }
+  recipeCountMap[key].total += log.servings_prepared;
 });
 
+// ✅ Set all 3 summary states
 setIngredientUsage(usageMap);
+setProductionSummary(productionByUnit);
+const sortedTop = Object.values(recipeCountMap).sort((a, b) => b.total - a.total).slice(0, 5);
+setTopRecipes(sortedTop);
 
 
 
@@ -178,6 +188,9 @@ setIngredientUsage(usageMap);
     // Low Stock Logic
     const low = inventoryData.filter(i => Number(i.qty_on_hand) < Number(i.reorder_level));
     setLowStock(low);
+
+
+    
 
     // Total Value by Unit
     const unitTotals = {};
@@ -343,6 +356,7 @@ if (!logsAllError && logsAll) {
                 <option value="foodCost">📉 Food Cost Analysis</option>
                 <option value="waste">🗑️ Waste Management</option>
                 <option value="ingredientUsage">🧑‍🍳 Ingredient Usage by Unit</option>
+                <option value="topRecipes">🍽️ Top Recipes Produced</option>
                 <option value="transfer">🔁 Transfer Report</option>
                 <option value="labor">🧍 Labor Cost</option>
                 <option value="pnl">📊 Profit & Loss Overview</option>
@@ -365,12 +379,31 @@ if (!logsAllError && logsAll) {
 
             {/* Food Cost */}
             {selectedTopicBlock === 'foodCost' && (
-              <div className="bg-white shadow-md rounded p-4">
-                <h2 className="text-xl font-semibold mb-2 text-gray-700">💰 Food Cost Analysis</h2>
-                <p className="text-sm text-gray-500">Tracks cost of goods sold vs sales revenue.</p>
-                <p className="mt-2 text-blue-600">[Placeholder for Food Cost % and Charts]</p>
-              </div>
-            )}
+  <div className="bg-white shadow-md rounded p-4 col-span-full">
+    <h2 className="text-xl font-semibold mb-2 text-gray-700">💰 Food Cost Analysis</h2>
+    <p className="text-sm text-gray-500 mb-3">
+      Total production cost based on recipe logs within the selected date range.
+    </p>
+    {Object.keys(productionSummary).length === 0 ? (
+      <p className="text-sm text-gray-500">No production activity during this period.</p>
+    ) : (
+      <ul className="text-sm text-gray-800 space-y-1">
+        {Object.entries(productionSummary).map(([unit, logs]) => {
+          const totalCost = logs.reduce((sum, log) => sum + (log.total_cost || 0), 0);
+          const totalServings = logs.reduce((sum, log) => sum + (log.servings_prepared || 0), 0);
+          const costPerServing =
+            totalServings > 0 ? (totalCost / totalServings).toFixed(2) : '0.00';
+          return (
+            <li key={unit}>
+              <strong>{unit}:</strong> ${totalCost.toFixed(2)} total cost for {totalServings}{' '}
+              servings (≈ ${costPerServing} per serving)
+            </li>
+          );
+        })}
+      </ul>
+    )}
+  </div>
+)}
 
             {/* Waste Summary */}
             {selectedTopicBlock === 'waste' && (
@@ -410,6 +443,23 @@ if (!logsAllError && logsAll) {
                 )}
               </div>
             )}
+
+
+                          {selectedTopicBlock === 'topRecipes' && (
+  <div className="col-span-full bg-white shadow-md rounded p-4">
+    <h2 className="text-xl font-semibold mb-2 text-gray-700">🍽️ Most Produced Recipes</h2>
+    {topRecipes.length === 0 ? (
+      <p className="text-sm text-gray-500">No production data for selected range.</p>
+    ) : (
+      <ul className="text-sm text-gray-700">
+        {topRecipes.map((r, idx) => (
+          <li key={idx}><strong>{r.name}</strong> — {r.total} servings in {r.unit}</li>
+        ))}
+      </ul>
+    )}
+  </div>
+)}
+
 
             {/* Transfers */}
             {selectedTopicBlock === 'transfer' && (

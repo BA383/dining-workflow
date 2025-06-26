@@ -4,6 +4,8 @@ import BackToAdminDashboard from '../BackToAdminDashboard';
 import { isAdmin, isDining } from '../utils/permissions';
 import { getCurrentUser, setRLSContext } from '../utils/userSession';
 import { BarChart3 as BarChartIcon } from 'lucide-react';
+import { BarChart3 } from 'lucide-react';
+
 
 
 import {
@@ -125,6 +127,19 @@ function InventoryDashboard() {
     Plan production runs and forecast ingredient needs by menu.
   </p>
 </Link>
+
+
+{/* Production Insights */}
+<Link to="/production-insights" className="p-6 bg-white shadow rounded hover:bg-gray-100">
+  <div className="flex items-center gap-3 mb-2">
+    <BarChart3 className="text-indigo-600" /> {/* Replace with your preferred icon */}
+    <h2 className="text-xl font-semibold">Production Insights</h2>
+  </div>
+  <p className="text-sm text-gray-600">
+    Analyze batch history, cost breakdowns, and top used ingredients.
+  </p>
+</Link>
+
 
 
        {/* Make the Reports card clickable */}

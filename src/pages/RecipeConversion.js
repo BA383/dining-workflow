@@ -65,7 +65,7 @@ if (!isAdmin() && !isDining()) {
   const addIngredient = () => {
     setNewRecipe(prev => ({
       ...prev,
-      items: [...prev.items, { sku: '', quantity: 0, unit: '' }]
+      items: [...prev.items, { sku: '', quantity: 0, unit: '', unit_cost: 0 }]
     }));
   };
 
@@ -232,6 +232,16 @@ const [{ error: unitError }, { error: roleError }] = await Promise.all([
       <option key={unit} value={unit}>{unit}</option>
     ))}
   </select>
+
+
+{/* Unit Cost Input */}
+<input
+  type="number"
+  className="border p-2 rounded w-1/4"
+  placeholder="Unit Cost"
+  value={item.unit_cost}
+  onChange={(e) => handleIngredientChange(i, 'unit_cost', Number(e.target.value))}
+/>
 </div>
       ))}
 

@@ -1,67 +1,47 @@
+// Enhanced MenuProduction.js with cost per batch, cost per serving, variance checks, and deduction logs
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import BackToInventoryDashboard from '../Components/BackToInventoryDashboard';
-import { isAdmin, isDining } from '../utils/permissions'; // adjust path as needed
-import { getCurrentUser, setRLSContext } from '../utils/userSession';
+import { isAdmin, isDining } from '../utils/permissions';
+import { getCurrentUser } from '../utils/userSession';
 
 function MenuProduction() {
   const [recipes, setRecipes] = useState([]);
   const [productionPlan, setProductionPlan] = useState([]);
   const [user, setUser] = useState({});
   const [selectedUnit, setSelectedUnit] = useState('');
-  
-
 
   useEffect(() => {
-  async function init() {
-    const currentUser = await getCurrentUser();
-    setUser(currentUser);
-    setSelectedUnit(currentUser?.unit || '');
+    async function init() {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+      setSelectedUnit(currentUser?.unit || '');
 
-    // ✅ Set RLS context BEFORE fetching recipes
-    await supabase.rpc('set_config', {
-      config_key: 'request.unit',
-      config_value: currentUser.unit
-    });
+      await supabase.rpc('set_config', {
+        config_key: 'request.unit',
+        config_value: currentUser.unit
+      });
+      await supabase.rpc('set_config', {
+        config_key: 'request.role',
+        config_value: currentUser.role
+      });
 
-    await supabase.rpc('set_config', {
-      config_key: 'request.role',
-      config_value: currentUser.role
-    });
+      fetchRecipes(currentUser.unit, currentUser.role);
+    }
+    init();
+  }, []);
 
-    // ✅ Then fetch recipes
-    fetchRecipes(currentUser.unit, currentUser.role);
+  if (!isAdmin() && !isDining()) {
+    return <div className="p-6 text-red-600 font-semibold">🚫 Inventory is for Dining staff only.</div>;
   }
 
-  init();
-}, []);
-
-
-if (!isAdmin() && !isDining()) {
-    return (
-      <div className="p-6">
-        <p className="text-red-600 font-semibold">🚫 Inventory is for Dining staff only.</p>
-      </div>
-    );
-  }
-  
   const fetchRecipes = async (unit, role) => {
-  let query = supabase.from('recipes').select('*');
-
-  if (role !== 'admin') {
-    query = query.eq('dining_unit', unit);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    console.error('❌ Error fetching recipes:', error.message);
-  } else {
-    setRecipes(data);
-  }
-};
-
-
+    let query = supabase.from('recipes').select('*');
+    if (role !== 'admin') query = query.eq('dining_unit', unit);
+    const { data, error } = await query;
+    if (error) console.error('❌ Error fetching recipes:', error.message);
+    else setRecipes(data);
+  };
 
   const addToPlan = (recipe) => {
     setProductionPlan([...productionPlan, { ...recipe, multiplier: 1 }]);
@@ -74,38 +54,7 @@ if (!isAdmin() && !isDining()) {
   };
 
   const handleSubmitProduction = async () => {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-
-    await supabase.rpc('set_config', {
-  config_key: 'request.unit',
-  config_value: user.unit
-});
-
-await supabase.rpc('set_config', {
-  config_key: 'request.role',
-  config_value: user.role
-});
-
-
-    const logs = productionPlan.map(item => ({
-      recipe_name: item.name,
-      servings_prepared: item.multiplier * item.yield,
-      dining_unit: selectedUnit,
-      timestamp: new Date().toISOString(),
-    }));
-
-    
-    console.log('🔍 Production logs payload:', logs);
-
-    const { error: logError } = await supabase.from('production_logs').insert(logs);
-
-    if (logError) {
-      console.error('❌ Failed to log production:', logError.message);
-      alert('Production log failed.');
-      return;
-    }
-
-    // Deduct ingredients from inventory
+    const logs = [];
     for (const item of productionPlan) {
       const { data: recipeData } = await supabase
         .from('recipes')
@@ -114,38 +63,78 @@ await supabase.rpc('set_config', {
         .single();
 
       const ingredients = recipeData?.items || [];
+      const servings = item.multiplier * item.yield;
+
+      let batchCost = 0;
+      for (const ing of ingredients) {
+        const { data: inventoryItem, error: costError } = await supabase
+          .from('inventory')
+          .select('unit_cost')
+          .eq('sku', ing.sku)
+          .eq('dining_unit', user.unit)
+          .single();
+
+        if (costError || !inventoryItem) {
+          console.warn(`⚠️ Could not fetch unit_cost for ${ing.sku}`);
+          continue;
+        }
+
+        const unitCost = inventoryItem.unit_cost || 0;
+        batchCost += unitCost * ing.quantity * item.multiplier;
+      }
+
+      batchCost = Number(batchCost.toFixed(2));
+
+      logs.push({
+        recipe_name: item.name,
+        servings_prepared: servings,
+        dining_unit: selectedUnit,
+        total_cost: batchCost,
+        timestamp: new Date().toISOString()
+      });
 
       for (const ing of ingredients) {
         const usedQty = ing.quantity * item.multiplier;
-
-        // Fetch current qty first
-        const { data: existingItem, error: fetchError } = await supabase
+        const { data: existingItem } = await supabase
           .from('inventory')
           .select('qty_on_hand')
           .eq('sku', ing.sku)
           .eq('dining_unit', user.unit)
           .single();
 
-        if (fetchError || !existingItem) {
-          console.error(`❌ Could not fetch inventory for ${ing.sku}`);
+        if (!existingItem) {
+          console.warn(`⚠️ ${ing.sku} not found in inventory.`);
           continue;
         }
 
-        const newQty = (existingItem.qty_on_hand || 0) - usedQty;
+        const newQty = existingItem.qty_on_hand - usedQty;
 
-        const { error: updateError } = await supabase
+        if (newQty < 0) {
+          console.warn(`⚠️ Insufficient ${ing.sku}: need ${usedQty}, have ${existingItem.qty_on_hand}`);
+        }
+
+        await supabase
           .from('inventory')
           .update({ qty_on_hand: newQty })
           .eq('sku', ing.sku)
           .eq('dining_unit', user.unit);
 
-        if (updateError) {
-          console.error(`❌ Failed to deduct ${ing.sku}`, updateError.message);
-        }
+        await supabase.from('inventory_deductions').insert({
+          sku: ing.sku,
+          qty_used: usedQty,
+          recipe: item.name,
+          production_time: new Date().toISOString(),
+          dining_unit: user.unit
+        });
       }
     }
 
-    alert('✅ Production logged and inventory updated!');
+    console.log('🧾 Production logs to insert:', logs);
+
+    const { error: logError } = await supabase.from('production_logs').insert(logs);
+    if (logError) alert('Production log failed.');
+    else alert('✅ Production logged and inventory updated!');
+
     setProductionPlan([]);
   };
 
@@ -155,24 +144,22 @@ await supabase.rpc('set_config', {
       <h2 className="text-2xl font-bold mb-4">Menu Production Planner</h2>
 
       {user?.role === 'admin' && (
-  <div className="mb-4">
-    <label className="font-semibold mr-2">Select Unit:</label>
-    <select
-      value={selectedUnit}
-      onChange={(e) => setSelectedUnit(e.target.value)}
-      className="border rounded p-2"
-    >
-      <option value="">-- Select --</option>
-      <option value="Discovery">Discovery</option>
-      <option value="Regattas">Regattas</option>
-      <option value="Commons">Commons</option>
-      <option value="Palette">Palette</option>
-      <option value="Einstein">Einstein</option>
-    </select>
-  </div>
-)}
-
-
+        <div className="mb-4">
+          <label className="font-semibold mr-2">Select Unit:</label>
+          <select
+            value={selectedUnit}
+            onChange={(e) => setSelectedUnit(e.target.value)}
+            className="border rounded p-2"
+          >
+            <option value="">-- Select --</option>
+            <option value="Discovery">Discovery</option>
+            <option value="Regattas">Regattas</option>
+            <option value="Commons">Commons</option>
+            <option value="Palette">Palette</option>
+            <option value="Einstein">Einstein</option>
+          </select>
+        </div>
+      )}
 
       <h3 className="text-lg font-semibold mb-2">Available Recipes</h3>
       <ul className="mb-6">
@@ -187,7 +174,7 @@ await supabase.rpc('set_config', {
 
       <h3 className="text-lg font-semibold mb-2">Production Plan</h3>
       {productionPlan.map((r, i) => (
-        <div key={i} className="mb-3">
+        <div key={i} className="mb-3 border p-3 rounded">
           <p><strong>{r.name}</strong></p>
           <label className="text-sm">Multiplier:</label>
           <input
@@ -196,7 +183,8 @@ await supabase.rpc('set_config', {
             value={r.multiplier}
             onChange={(e) => updateMultiplier(i, Number(e.target.value))}
           />
-          <p className="text-xs text-gray-500 mt-1">Planned Servings: {r.multiplier * r.yield}</p>
+          <p className="text-xs text-gray-600">Planned Servings: {r.multiplier * r.yield}</p>
+          <p className="text-xs text-gray-600 italic">Estimated Batch Cost and Cost/Serving will appear after submission.</p>
         </div>
       ))}
 

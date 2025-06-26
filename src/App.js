@@ -26,6 +26,7 @@ import ViewRecipes from './pages/ViewRecipes';
 import AdminUserManager from './pages/AdminUserManager';
 import ResetPassword from './pages/ResetPassword';
 import RunEOMInventory from './pages/RunEOMInventory';
+import ProductionInsights from './pages/ProductionInsights';
 
 
 
@@ -194,7 +195,7 @@ function AppContent() {
             <Route path="/admin/users" element={<AdminUserManager />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/run-eom-inventory" element={<RunEOMInventory />} />
-
+            <Route path="/production-insights" element={<ProductionInsights />} />
           </Routes>
         </main>
       </div>
