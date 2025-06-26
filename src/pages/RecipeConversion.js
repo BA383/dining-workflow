@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import BackToInventoryDashboard from '../Components/BackToInventoryDashboard';
 import { Link } from 'react-router-dom';
 import { ClipboardList } from 'lucide-react';
-import { isAdmin, isDining } from '../utils/permissions'; // adjust path as needed
+import { isAdmin, isDining } from '../utils/permissions';
 
 function RecipeConversion() {
   const [inventoryItems, setInventoryItems] = useState([]);
@@ -13,54 +13,51 @@ function RecipeConversion() {
 
   const unitOptions = ['ea', 'case', 'lbs', 'gallons', 'box', 'can', 'pack', 'tray'];
 
-  
   useEffect(() => {
     fetchInventoryItems();
   }, []);
 
-const fetchInventoryItems = async () => {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const fetchInventoryItems = async () => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-  await supabase.rpc('set_config', {
-    config_key: 'request.unit',
-    config_value: user.unit
-  });
+    await supabase.rpc('set_config', {
+      config_key: 'request.unit',
+      config_value: user.unit
+    });
 
-  await supabase.rpc('set_config', {
-    config_key: 'request.role',
-    config_value: user.role
-  });
+    await supabase.rpc('set_config', {
+      config_key: 'request.role',
+      config_value: user.role
+    });
 
-  let query = supabase.from('inventory').select('sku, name, unit');
+    let query = supabase.from('inventory').select('sku, name, unit, unitPrice');
 
-  if (user.role !== 'admin') {
-    query = query.eq('dining_unit', user.unit);
-  }
-
-  const { data, error } = await query;
-
-  if (data) {
-    setInventoryItems(data);
-    console.log('✅ Inventory items loaded:', data);
-    if (data.length === 0) {
-      alert('⚠️ No inventory found for your unit. Please register items first.');
+    if (user.role !== 'admin') {
+      query = query.eq('dining_unit', user.unit);
     }
-  }
 
-  if (error) {
-    console.error('Inventory fetch error:', error.message);
-  }
-};
+    const { data, error } = await query;
 
+    if (data) {
+      setInventoryItems(data);
+      console.log('✅ Inventory items loaded:', data);
+      if (data.length === 0) {
+        alert('⚠️ No inventory found for your unit. Please register items first.');
+      }
+    }
 
-if (!isAdmin() && !isDining()) {
+    if (error) {
+      console.error('Inventory fetch error:', error.message);
+    }
+  };
+
+  if (!isAdmin() && !isDining()) {
     return (
       <div className="p-6">
         <p className="text-red-600 font-semibold">🚫 Inventory is for Dining staff only.</p>
       </div>
     );
   }
-
 
   const addIngredient = () => {
     setNewRecipe(prev => ({
@@ -72,82 +69,84 @@ if (!isAdmin() && !isDining()) {
   const handleIngredientChange = (index, field, value) => {
     const updated = [...newRecipe.items];
     updated[index][field] = value;
+
+    // Auto-update unit_cost when SKU changes
+    if (field === 'sku') {
+      const selectedItem = inventoryItems.find(item => item.sku === value);
+      updated[index].unit_cost = selectedItem?.unitPrice || 0;
+    }
+
     setNewRecipe(prev => ({ ...prev, items: updated }));
   };
 
- const saveRecipe = async () => {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const saveRecipe = async () => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-  // ✅ Step 1: Get valid Supabase session
-  const {
-    data: { session },
-    error: sessionError
-  } = await supabase.auth.getSession();
+    const {
+      data: { session },
+      error: sessionError
+    } = await supabase.auth.getSession();
 
-  if (sessionError || !session) {
-    console.error('❌ No Supabase session found');
-    alert('No valid session — please log in again.');
-    return;
-  }
+    if (sessionError || !session) {
+      console.error('❌ No Supabase session found');
+      alert('No valid session — please log in again.');
+      return;
+    }
 
-  // ✅ Step 2: Set request.unit and request.role
-const [{ error: unitError }, { error: roleError }] = await Promise.all([
-  supabase.rpc('set_config', {
-    config_key: 'request.unit',
-    config_value: user.unit,
-    is_local: false
-  }),
-  supabase.rpc('set_config', {
-    config_key: 'request.role',
-    config_value: user.role,
-    is_local: false
-  })
-]);
+    const [{ error: unitError }, { error: roleError }] = await Promise.all([
+      supabase.rpc('set_config', {
+        config_key: 'request.unit',
+        config_value: user.unit,
+        is_local: false
+      }),
+      supabase.rpc('set_config', {
+        config_key: 'request.role',
+        config_value: user.role,
+        is_local: false
+      })
+    ]);
 
-  if (unitError || roleError) {
-    console.error('❌ Failed to set request context:', {
-      unitError: unitError?.message,
-      roleError: roleError?.message
-    });
-    alert(`Unable to set request context — insert blocked.\nUnit: ${unitError?.message || 'OK'}\nRole: ${roleError?.message || 'OK'}`);
-    return;
-  }
+    if (unitError || roleError) {
+      console.error('❌ Failed to set request context:', {
+        unitError: unitError?.message,
+        roleError: roleError?.message
+      });
+      alert(`Unable to set request context — insert blocked.\nUnit: ${unitError?.message || 'OK'}\nRole: ${roleError?.message || 'OK'}`);
+      return;
+    }
 
-  // ✅ Step 3: Validate form
-  if (!newRecipe.name || newRecipe.yield <= 0 || newRecipe.items.length === 0) {
-    alert('Please complete all fields and add at least one ingredient.');
-    return;
-  }
+    if (!newRecipe.name || newRecipe.yield <= 0 || newRecipe.items.length === 0) {
+      alert('Please complete all fields and add at least one ingredient.');
+      return;
+    }
 
-  const hasValidSKU = newRecipe.items.every(i => i.sku && i.quantity > 0);
-  if (!hasValidSKU) {
-    alert('Each ingredient must have a SKU and a quantity greater than 0.');
-    return;
-  }
+    const hasValidSKU = newRecipe.items.every(i => i.sku && i.quantity > 0);
+    if (!hasValidSKU) {
+      alert('Each ingredient must have a SKU and a quantity greater than 0.');
+      return;
+    }
 
-  // ✅ Step 4: Insert recipe
-  const payload = {
-    name: newRecipe.name.trim(),
-    yield: Number(newRecipe.yield),
-    items: newRecipe.items,
-    dining_unit: user.unit,
-    created_by: user.email,
-    created_at: new Date().toISOString()
+    const payload = {
+      name: newRecipe.name.trim(),
+      yield: Number(newRecipe.yield),
+      items: newRecipe.items,
+      dining_unit: user.unit,
+      created_by: user.email,
+      created_at: new Date().toISOString()
+    };
+
+    console.log('🔍 Submitting recipe payload:', payload);
+
+    const { error } = await supabase.from('recipes').insert([payload]);
+
+    if (error) {
+      console.error('❌ Insert failed:', error);
+      alert(`❌ Failed to save recipe: ${error.message}`);
+    } else {
+      alert('✅ Recipe saved!');
+      setNewRecipe({ name: '', yield: 0, items: [] });
+    }
   };
-
-  console.log('🔍 Submitting recipe payload:', payload);
-
-  const { error } = await supabase.from('recipes').insert([payload]);
-
-  if (error) {
-    console.error('❌ Insert failed:', error);
-    alert(`❌ Failed to save recipe: ${error.message}`);
-  } else {
-    alert('✅ Recipe saved!');
-    setNewRecipe({ name: '', yield: 0, items: [] });
-  }
-};
-
 
   const handleQuickAdd = async () => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -158,7 +157,7 @@ const [{ error: unitError }, { error: roleError }] = await Promise.all([
       qty_on_hand: Number(quickItem.quantity || 1),
       dining_unit: user.unit,
       user_email: user.email,
-      updated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     };
     const { error } = await supabase.from('inventory').insert([newItem]);
     if (error) {
@@ -195,54 +194,49 @@ const [{ error: unitError }, { error: roleError }] = await Promise.all([
 
       <h3 className="font-semibold mb-2">Ingredients</h3>
       {newRecipe.items.map((item, i) => (
-<div key={i} className="flex gap-2 mb-2">
-  {/* SKU Dropdown */}
-  <select
-  className="border p-2 rounded w-1/2"
-  value={item.sku}
-  onChange={(e) => handleIngredientChange(i, 'sku', e.target.value)}
->
-  <option value="">Select SKU</option>
-  {inventoryItems.map(inv => (
-    <option key={inv.sku} value={inv.sku}>
-      {inv.name} ({inv.sku})
-    </option>
-  ))}
-</select>
+        <div key={i} className="flex gap-2 mb-2 items-center">
+          <select
+            className="border p-2 rounded w-1/3"
+            value={item.sku}
+            onChange={(e) => handleIngredientChange(i, 'sku', e.target.value)}
+          >
+            <option value="">Select SKU</option>
+            {inventoryItems.map(inv => (
+              <option key={inv.sku} value={inv.sku}>
+                {inv.name} ({inv.sku})
+              </option>
+            ))}
+          </select>
 
+          <input
+            type="number"
+            className="border p-2 rounded w-1/6"
+            placeholder="Qty"
+            value={item.quantity}
+            onChange={(e) => handleIngredientChange(i, 'quantity', Number(e.target.value))}
+          />
 
-  {/* Quantity Input */}
-  <input
-    type="number"
-    className="border p-2 rounded w-1/6"
-    placeholder="Qty"
-    value={item.quantity}
-    onChange={(e) => handleIngredientChange(i, 'quantity', Number(e.target.value))}
-  />
+          <select
+            className="border p-2 rounded w-1/6"
+            value={item.unit}
+            onChange={(e) => handleIngredientChange(i, 'unit', e.target.value)}
+          >
+            <option value="">Unit</option>
+            {unitOptions.map(unit => (
+              <option key={unit} value={unit}>{unit}</option>
+            ))}
+          </select>
 
+          <input
+            type="number"
+            className="border p-2 rounded w-1/6"
+            placeholder="Unit Cost"
+            value={item.unit_cost}
+            onChange={(e) => handleIngredientChange(i, 'unit_cost', Number(e.target.value))}
+          />
 
-  {/* Unit Dropdown */}
-  <select
-    className="border p-2 rounded w-1/4"
-    value={item.unit}
-    onChange={(e) => handleIngredientChange(i, 'unit', e.target.value)}
-  >
-    <option value="">Unit</option>
-    {unitOptions.map(unit => (
-      <option key={unit} value={unit}>{unit}</option>
-    ))}
-  </select>
-
-
-{/* Unit Cost Input */}
-<input
-  type="number"
-  className="border p-2 rounded w-1/4"
-  placeholder="Unit Cost"
-  value={item.unit_cost}
-  onChange={(e) => handleIngredientChange(i, 'unit_cost', Number(e.target.value))}
-/>
-</div>
+          <div className="text-sm text-gray-700 w-1/6">${(item.unit_cost * item.quantity).toFixed(2)}</div>
+        </div>
       ))}
 
       <button
@@ -260,13 +254,12 @@ const [{ error: unitError }, { error: roleError }] = await Promise.all([
           Save Recipe
         </button>
 
-<button
-  className="bg-red-500 text-white px-4 py-2 rounded shadow"
-  onClick={() => setNewRecipe({ name: '', yield: 0, items: [] })}
->
-  Clear Fields
-</button>
-
+        <button
+          className="bg-red-500 text-white px-4 py-2 rounded shadow"
+          onClick={() => setNewRecipe({ name: '', yield: 0, items: [] })}
+        >
+          Clear Fields
+        </button>
       </div>
 
       {showQuickAdd && (

@@ -1,4 +1,3 @@
-// Enhanced MenuProduction.js with cost per batch, cost per serving, variance checks, and deduction logs
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import BackToInventoryDashboard from '../Components/BackToInventoryDashboard';
@@ -55,6 +54,7 @@ function MenuProduction() {
 
   const handleSubmitProduction = async () => {
     const logs = [];
+
     for (const item of productionPlan) {
       const { data: recipeData } = await supabase
         .from('recipes')
@@ -69,17 +69,17 @@ function MenuProduction() {
       for (const ing of ingredients) {
         const { data: inventoryItem, error: costError } = await supabase
           .from('inventory')
-          .select('unit_cost')
+          .select('unitPrice')
           .eq('sku', ing.sku)
           .eq('dining_unit', user.unit)
           .single();
 
         if (costError || !inventoryItem) {
-          console.warn(`⚠️ Could not fetch unit_cost for ${ing.sku}`);
+          console.warn(`⚠️ Could not fetch unitPrice for ${ing.sku}`);
           continue;
         }
 
-        const unitCost = inventoryItem.unit_cost || 0;
+        const unitCost = inventoryItem.unitPrice ?? 0;
         batchCost += unitCost * ing.quantity * item.multiplier;
       }
 
@@ -95,6 +95,7 @@ function MenuProduction() {
 
       for (const ing of ingredients) {
         const usedQty = ing.quantity * item.multiplier;
+
         const { data: existingItem } = await supabase
           .from('inventory')
           .select('qty_on_hand')
@@ -132,7 +133,7 @@ function MenuProduction() {
     console.log('🧾 Production logs to insert:', logs);
 
     const { error: logError } = await supabase.from('production_logs').insert(logs);
-    if (logError) alert('Production log failed.');
+    if (logError) alert('❌ Production log failed.');
     else alert('✅ Production logged and inventory updated!');
 
     setProductionPlan([]);
@@ -184,7 +185,7 @@ function MenuProduction() {
             onChange={(e) => updateMultiplier(i, Number(e.target.value))}
           />
           <p className="text-xs text-gray-600">Planned Servings: {r.multiplier * r.yield}</p>
-          <p className="text-xs text-gray-600 italic">Estimated Batch Cost and Cost/Serving will appear after submission.</p>
+          <p className="text-xs text-gray-600 italic">Estimated cost data is calculated after submission.</p>
         </div>
       ))}
 
