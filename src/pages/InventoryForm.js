@@ -141,8 +141,9 @@ try {
   if (qrPath) {
     const { error: updateError } = await supabase.from('inventory')
       .update({ qr_path: qrPath }) // ✅ Ensure this matches the column in Supabase
-      .eq('sku', form.sku)
-      .eq('dining_unit', user.unit);
+      .eq('sku', form.barcode)
+      .eq('dining_unit', form.dining_unit);
+
 
     if (updateError) {
       console.error(`❌ Failed to update qr_path for ${form.sku}:`, updateError.message);
@@ -221,21 +222,22 @@ console.log("QR Label uploaded to:", labelPath);
 alert('✅ New inventory item registered.');
 
 
-    setForm({
-      barcode: '',
-      unit: user?.unit || '',
-      email: user?.email || '',
-      itemName: '',
-      category: '',
-      quantity: '',
-      unitPrice: '',
-      unitMeasure: '',
-      location: '',
-      dateReceived: '',
-      notes: '',
-      reorder_level: '', // ✅ Reset here
-    });
-  };
+    setForm((prev) => ({
+  barcode: '',
+  dining_unit: user?.role === 'admin' ? prev.dining_unit : (user?.unit ?? ''),
+  email: user?.email || '',
+  itemName: '',
+  category: '',
+  quantity: '',
+  unitPrice: '',
+  unitMeasure: '',
+  location: '',
+  dateReceived: '',
+  notes: '',
+  reorder_level: '',
+}));
+  
+};
 
   const generateAndDownloadQRCode = async (sku) => {
     if (!sku) return;

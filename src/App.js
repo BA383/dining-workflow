@@ -121,7 +121,7 @@ function AppContent() {
   to="/invoice-log"
   className="block bg-blue-800 text-white px-3 py-2 rounded hover:bg-blue-700 mt-2"
 >
-  Invoice Log
+  Purchase Log
 </Link>
     </li>
   </>

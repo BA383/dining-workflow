@@ -12,6 +12,8 @@ function SignUp() {
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(false);
+
 
 
    // ✅ This must be inside the component
@@ -19,7 +21,7 @@ function SignUp() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleSignUp = async () => {
+ const handleSignUp = async () => {
   setError('');
   setSuccess('');
 
@@ -46,14 +48,15 @@ function SignUp() {
     return;
   }
 
-  const userId = authData.user?.id;
+  // ✅ SAFE: Extract userId even if confirmation is off
+  const userId = authData.user?.id || authData.session?.user?.id;
 
   if (!userId) {
     setError('Signup succeeded but user ID was not returned.');
     return;
   }
 
-  // ✅ STEP 2: Set RLS context for 'public' inserts
+  // ✅ STEP 2: Set RLS context (optional depending on your Supabase RLS config)
   const { error: configError } = await supabase.rpc('set_config', {
     config_key: 'request.role',
     config_value: 'public',
@@ -69,14 +72,15 @@ function SignUp() {
   // ✅ STEP 3: Insert into `profiles` table
   const { error: profileError } = await supabase.from('profiles').insert([
     {
-      id: userId, // <-- use userId here
-      email: form.email,
-      role: form.role,
-      unit: form.role === 'dining' ? form.unit : null
+      id: userId,
+      email,
+      role,
+      unit: role === 'dining' ? unit : null
     }
   ]);
 
   if (profileError) {
+    console.error('Profile insert error:', profileError.message);
     setError('Signup succeeded but failed to create profile.');
     return;
   }
@@ -84,6 +88,7 @@ function SignUp() {
   setSuccess('✅ Account created! Please check your email to confirm.');
   setTimeout(() => navigate('/login'), 3000);
 };
+
 
 
   return (
@@ -141,11 +146,13 @@ function SignUp() {
 
 
       <button
-        onClick={handleSignUp}
-        className="bg-blue-600 text-white px-4 py-2 rounded w-full"
-      >
-        Create Account
-      </button>
+  onClick={handleSignUp}
+  className="bg-blue-600 text-white px-4 py-2 rounded w-full disabled:opacity-50"
+  disabled={loading}
+>
+  {loading ? 'Creating Account...' : 'Create Account'}
+</button>
+
     </div>
   );
 }

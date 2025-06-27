@@ -334,8 +334,51 @@ const processUploadRows = async (rows, user) => {
     };
   });
 
-  // ✅ Upload to Supabase inventory
-  const { error } = await supabase.from('inventory').insert(transformedRows);
+// Step 1: Merge uploaded items with existing inventory entries
+const mergedRows = await Promise.all(
+  transformedRows.map(async (newItem) => {
+    const { data: existing, error } = await supabase
+      .from('inventory')
+      .select('*')
+      .eq('sku', newItem.sku)
+      .eq('dining_unit', newItem.dining_unit)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('❌ Error fetching existing item:', error.message);
+      return newItem; // fallback to original if fetch fails
+    }
+
+    if (existing) {
+      const mergedQty = (existing.qty_on_hand || 0) + (newItem.qty_on_hand || 0);
+      const unitPrice = newItem.unitPrice || existing.unitPrice || 0;
+
+      return {
+        ...existing,
+        ...newItem,
+        qty_on_hand: mergedQty,
+        extendedPrice: mergedQty * unitPrice,
+        updated_at: new Date().toISOString(),
+      };
+    }
+
+    return newItem; // item didn't exist yet
+  })
+);
+
+// Step 2: Upsert the merged inventory
+const { error: upsertError } = await supabase
+  .from('inventory')
+  .upsert(mergedRows, { onConflict: ['sku', 'dining_unit'] });
+
+if (upsertError) {
+  console.error('❌ Merge upsert error:', upsertError.message);
+  alert('Error saving inventory!');
+} else {
+  alert('✅ Inventory successfully merged and saved!');
+}
+
+
 
   if (error) {
     console.error('❌ Upload error:', error.message);

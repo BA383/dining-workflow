@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import BackToAdminDashboard from './BackToAdminDashboard';
 import { supabase } from './supabaseClient'; // adjust path as needed
 
-
 function Invoices() {
   const [form, setForm] = useState({
     name: '',
@@ -10,6 +9,8 @@ function Invoices() {
     vendor: '',
     date: '',
     invoiceDate: '',
+    dateReceived: '',
+    dateSubmitted: '',
     invoiceNumber: '',
     diningUnit: '',
     entity: '',
@@ -23,6 +24,12 @@ function Invoices() {
     originalRecipient: ''
   });
 
+const [showTempAgencyOptions, setShowTempAgencyOptions] = useState(false);
+const [selectedTempAgency, setSelectedTempAgency] = useState('');
+const [showTempVendors, setShowTempVendors] = useState(false);
+const [tempVendor, setTempVendor] = useState('');
+
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -31,23 +38,35 @@ function Invoices() {
   const handleSubmit = async (e) => {
   e.preventDefault();
 
+
+const vendorName = form.vendor === 'Temp Agency' && selectedTempAgency
+  ? selectedTempAgency
+  : form.vendor;
+
+ console.log("Submitting invoice:", form);
+
   const { error } = await supabase.from('invoice_logs').insert({
-    name: form.name,
-    email: form.email,
-    vendor: form.vendor,
-    submitted_by: form.submittedBy,
-    original_recipient: form.originalRecipient,
-    entity: form.entity,
-    dining_unit: form.diningUnit,
-    invoice_date: form.invoiceDate,
-    invoice_number: form.invoiceNumber,
-    invoice_total: form.invoiceTotal,
-    customer_number: form.customerNumber,
-    order_number: form.orderNumber,
-    purchase_order: form.purchaseOrder,
-    week_ending: form.weekEnding,
-    memo: form.memo
-  });
+  name: form.name,
+  email: form.email,
+  vendor: vendorName, // or form.vendor
+  submitted_by: form.submittedBy,
+  original_recipient: form.originalRecipient,
+  entity: form.entity,
+  dining_unit: form.diningUnit,
+  invoice_date: form.invoiceDate,
+  date_received: form.date,            // make sure this column exists
+  invoice_number: form.invoiceNumber,
+  invoice_total: parseFloat(form.invoiceTotal), // ensure this is a number
+  customer_number: form.customerNumber,
+  order_number: form.orderNumber,
+  purchase_order: form.purchaseOrder,
+  week_ending: form.weekEnding || null,
+  memo: form.memo,
+  date_submitted: new Date().toISOString(),
+  payment_method: form.paymentMethod || null,
+  status: 'Submitted'
+});
+
 
   if (error) {
     alert('Failed to submit invoice.');
@@ -86,14 +105,56 @@ function Invoices() {
           <input type="text" name="name" placeholder="Your Full Name" value={form.name} onChange={handleChange} className="border rounded p-2 w-full" />
           <input type="email" name="email" placeholder="Your Email" value={form.email} onChange={handleChange} className="border rounded p-2 w-full" />
 
-          <select name="vendor" value={form.vendor} onChange={handleChange} className="border rounded p-2 w-full">
-            <option value="">Select Vendor</option>
-            <option value="Sysco">Sysco</option>
-            <option value="QCD">QCD</option>
-            <option value="Keany Produce">Keany Produce</option>
-            <option value="Temp Agency">Temp Agency</option>
-            <option value="Other">Other</option>
-          </select>
+          <select
+  name="vendor"
+  value={form.vendor}
+  onChange={(e) => {
+    const value = e.target.value;
+    setForm((prev) => ({ ...prev, vendor: value }));
+    setShowTempVendors(value === 'Temp Agency');
+    if (value !== 'Temp Agency') setTempVendor('');
+  }}
+  className="border rounded p-2 w-full"
+>
+  <option value="">Select Vendor</option>
+  <option value="Sysco">Sysco</option>
+  <option value="QCD">QCD</option>
+  <option value="Keany Produce">Keany Produce</option>
+  <option value="Temp Agency">Temp Agency</option>
+  <option value="Other">Other</option>
+</select>
+
+
+
+
+{showTempVendors && (
+  <>
+    <select
+      value={tempVendor}
+      onChange={(e) => setTempVendor(e.target.value)}
+      className="border rounded p-2 w-full"
+    >
+      <option value="">Select Temp Agency</option>
+      <option value="Labor Finders">Labor Finders</option>
+      <option value="Integrity Staffing">Integrity Staffing</option>
+      <option value="Express Employment">Express Employment</option>
+    </select>
+
+    <div className="mt-2">
+      <label htmlFor="weekEnding" className="block text-sm font-medium text-gray-700 mb-1">
+        Week Ending (W/E)
+      </label>
+      <input
+        type="date"
+        name="weekEnding"
+        id="weekEnding"
+        value={form.weekEnding}
+        onChange={handleChange}
+        className="border rounded p-2 w-full"
+      />
+    </div>
+  </>
+)}
 
           <select name="submittedBy" value={form.submittedBy} onChange={handleChange} className="border rounded p-2 w-full">
             <option value="">Submitted By</option>
@@ -111,7 +172,7 @@ function Invoices() {
     type="text"
     id="originalRecipient"
     name="originalRecipient"
-    placeholder="e.g., Dining Services, Director, Business Office"
+    placeholder="e.g., Dining Services, Business Office, Vendor"
     value={form.originalRecipient}
     onChange={handleChange}
     className="border rounded p-2 w-full"
@@ -119,9 +180,67 @@ function Invoices() {
 </div>
 
 
-          <input type="date" name="date" placeholder="Today's Date" value={form.date} onChange={handleChange} className="border rounded p-2 w-full" />
-          <input type="date" name="invoiceDate" placeholder="Invoice Date" value={form.invoiceDate} onChange={handleChange} className="border rounded p-2 w-full" />
-          <input type="text" name="invoiceNumber" placeholder="Invoice Number" value={form.invoiceNumber} onChange={handleChange} className="border rounded p-2 w-full" />
+          <div className="mb-4">
+  <label htmlFor="invoiceDate" className="block text-sm font-medium text-gray-700 mb-1">
+    Invoice Date (from vendor)
+  </label>
+  <input
+    type="date"
+    id="invoiceDate"
+    name="invoiceDate"
+    value={form.invoiceDate}
+    onChange={handleChange}
+    className="border rounded p-2 w-full"
+  />
+</div>
+
+
+<div className="mb-4">
+  <label htmlFor="invoiceNumber" className="block text-sm font-medium text-gray-700 mb-1">
+    Invoice Number
+  </label>
+  <input
+    type="text"
+    id="invoiceNumber"
+    name="invoiceNumber"
+    placeholder="e.g. 4567-A"
+    value={form.invoiceNumber}
+    onChange={handleChange}
+    className="border rounded p-2 w-full"
+  />
+</div>
+
+
+
+<div className="mb-4">
+  <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
+    Date Invoice Was Received by Submitter
+  </label>
+  <input
+    type="date"
+    id="date"
+    name="date"
+    value={form.date}
+    onChange={handleChange}
+    className="border rounded p-2 w-full"
+  />
+</div>
+
+<div className="mb-4">
+  <label htmlFor="weekEnding" className="block text-sm font-medium text-gray-700 mb-1">
+    Date Submitted Into Workflow
+  </label>
+<input
+  type="date"
+  id="weekEnding"
+  name="weekEnding"
+  value={form.weekEnding}
+  onChange={handleChange}
+  className="border rounded p-2 w-full"
+/>
+
+</div>
+
 
           <select name="diningUnit" value={form.diningUnit} onChange={handleChange} className="border rounded p-2 w-full">
             <option value="">Select Dining Unit</option>
