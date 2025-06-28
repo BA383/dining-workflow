@@ -21,72 +21,61 @@ function SignUp() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
- const handleSignUp = async () => {
+const handleSignUp = async () => {
   setError('');
   setSuccess('');
+  setLoading(true); // START
 
-  const { email, password, role, unit } = form;
+  try {
+    const { email, password, role, unit } = form;
 
-  if (!email || !password || !role) {
-    setError('Please fill out all required fields.');
-    return;
-  }
-
-  if (role === 'dining' && !unit) {
-    setError('Dining staff must select a dining unit.');
-    return;
-  }
-
-  // ✅ STEP 1: Create Supabase Auth user
-  const { data: authData, error: authError } = await supabase.auth.signUp(
-    { email, password },
-    { emailRedirectTo: 'http://localhost:3000/login' }
-  );
-
-  if (authError) {
-    setError('Signup failed: ' + authError.message);
-    return;
-  }
-
-  // ✅ SAFE: Extract userId even if confirmation is off
-  const userId = authData.user?.id || authData.session?.user?.id;
-
-  if (!userId) {
-    setError('Signup succeeded but user ID was not returned.');
-    return;
-  }
-
-  // ✅ STEP 2: Set RLS context (optional depending on your Supabase RLS config)
-  const { error: configError } = await supabase.rpc('set_config', {
-    config_key: 'request.role',
-    config_value: 'public',
-    is_local: false
-  });
-
-  if (configError) {
-    console.error('❌ Failed to set config:', configError.message);
-    setError('Signup succeeded, but context setup failed.');
-    return;
-  }
-
-  // ✅ STEP 3: Insert into `profiles` table
-  const { error: profileError } = await supabase.from('profiles').insert([
-    {
-      id: userId,
-      email,
-      role,
-      unit: role === 'dining' ? unit : null
+    if (!email || !password || !role) {
+      setError('Please fill out all required fields.');
+      return;
     }
-  ]);
 
-  if (profileError) {
-    console.error('Profile insert error:', profileError.message);
-    setError('Signup succeeded but failed to create profile.');
-    return;
+    if (role === 'dining' && !unit) {
+      setError('Dining staff must select a dining unit.');
+      return;
+    }
+
+    const { data: authData, error: authError } = await supabase.auth.signUp(
+      { email, password },
+      { emailRedirectTo: 'https://dining-workflow-git-main-damians-projects-75fbc5e7.vercel.app/login' } // Use your real domain, NOT localhost
+    );
+
+    if (authError) {
+      setError('Signup failed: ' + authError.message);
+      return;
+    }
+
+    const userId = authData.user?.id || authData.session?.user?.id;
+
+    if (!userId) {
+      setError('Signup succeeded but user ID was not returned.');
+      return;
+    }
+
+    const { error: profileError } = await supabase.from('profiles').insert([
+      {
+        id: userId,
+        email,
+        role,
+        unit: role === 'dining' ? unit : null
+      }
+    ]);
+
+    if (profileError) {
+      console.error('Profile insert error:', profileError.message);
+      setError('Signup succeeded but failed to create profile.');
+      return;
+    }
+
+    setSuccess('✅ Account created! Please check your email to confirm.');
+    setTimeout(() => navigate('/login'), 3000);
+  } finally {
+    setLoading(false); // STOP
   }
-
-  setSuccess('✅ Account created! Please check your email to confirm.');
-  setTimeout(() => navigate('/login'), 3000);
 };
 
 
