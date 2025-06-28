@@ -1,117 +1,14 @@
-import Papa from 'papaparse'; // CSV parser library
-
+import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-
 import React, { useState, useEffect } from 'react';
 import BackToAdminDashboard from './BackToAdminDashboard';
-import { isAdmin, isDining } from './utils/permissions';
+import { isAdmin } from './utils/permissions';
+import { getCurrentUser } from './utils/userSession';
 
 
 
 
-const mapField = (target, label, value) => {
-const cleanLabel = label.toLowerCase();
-
-  if (cleanLabel.includes('sales food - taxable')) target.salesTaxable = value;
-  if (cleanLabel.includes('sales tax collected')) target.salesTaxCollected = value;
-  if (cleanLabel.includes('cash over')) target.cashOver = value;
-  if (cleanLabel.includes('cash short')) target.cashShort = value;
-  if (cleanLabel.includes('dining dollars') && !cleanLabel.includes('mo')) target.diningDollars = value;
-  if (cleanLabel.includes('mo dining dollars') && !cleanLabel.includes('tax')) target.moDiningDollars = value;
-  if (cleanLabel.includes('mo dining dollars tax')) target.moDiningDollarsTax = value;
-  if (cleanLabel.includes('dining loyalty')) target.diningLoyalty = value;
-  if (cleanLabel.includes('department charges')) target.deptCharges = value;
-  if (cleanLabel.includes('reg credit sales tax')) target.regCreditSalesTax = value;
-  if (cleanLabel.includes('reg credit sales')) target.regCreditSales = value;
-  if (cleanLabel.includes('mo credit sales tax')) target.moCreditSalesTax = value;
-  if (cleanLabel.includes('mo credit sales')) target.moCreditSales = value;
-};
-
-
-
-function RegattasForm() {
-
-  reader.onload = (event) => {
-    let values = {};
-    let text = '';
-
-    // Check file type
-    const isExcel = file.name.endsWith('.xlsx');
-
-    const mapField = (target, label, value) => {
-  const cleanLabel = label.toLowerCase();
-
-  if (cleanLabel.includes('mo credit sales tax')) {
-    target.moCreditSalesTax = value;
-  } else if (cleanLabel.includes('mo credit sales')) {
-    target.moCreditSales = value;
-  } else if (cleanLabel.includes('reg credit sales tax')) {
-    target.regCreditSalesTax = value;
-  } else if (cleanLabel.includes('reg credit sales')) {
-    target.regCreditSales = value;
-  } else if (cleanLabel.includes('mo dining dollars tax')) {
-    target.moDiningDollarsTax = value;
-  } else if (cleanLabel.includes('mo dining dollars')) {
-    target.moDiningDollars = value;
-  } else if (cleanLabel.includes('sales food - taxable')) {
-    target.salesTaxable = value;
-  } else if (cleanLabel.includes('sales tax collected')) {
-    target.salesTaxCollected = value;
-  } else if (cleanLabel.includes('cash over')) {
-    target.cashOver = value;
-  } else if (cleanLabel.includes('cash short')) {
-    target.cashShort = value;
-  } else if (cleanLabel.includes('dining loyalty')) {
-    target.diningLoyalty = value;
-  } else if (cleanLabel.includes('dining dollars')) {
-    target.diningDollars = value;
-  } else if (cleanLabel.includes('department charges')) {
-    target.deptCharges = value;
-  }
-};
-
-
-    setForm((prev) => ({ ...prev, ...values }));
-  };
-
-  if (file.name.endsWith('.xlsx')) {
-    reader.readAsArrayBuffer(file);
-  } else {
-    reader.readAsText(file);
-  }
-};
-
-
-
-function Section({ title, children }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="mb-6 border rounded bg-white shadow">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full text-left p-3 bg-gray-200 font-semibold"
-      >
-        {title} {open ? '▲' : '▼'}
-      </button>
-      {open && <div className="p-4 space-y-4">{children}</div>}
-    </div>
-  );
-}
-
-
-// 🔐 Restrict access to Admins only
-  if (!isAdmin() && !isDining()) {
-  return (
-    <div className="p-6">
-      <p className="text-red-600 font-semibold text-lg">
-        🚫 Access Denied: Only Admins and Dining staff can access this page.
-      </p>
-    </div>
-  );
-}
-
-
-  
+  // ✅ Access granted
   const initialState = {
     unit: 'Regattas', fiscalYear: '', transmittalNumber: '', workDate: '',
     salesTaxable: '', checkSales: '', checkSalesTax: '', salesTaxCollected: '',
@@ -121,26 +18,107 @@ function Section({ title, children }) {
     regCreditSales: '', moCreditSales: '', regCreditSalesTax: '', moCreditSalesTax: ''
   };
 
-  const [form, setForm] = useState(initialState);
 
-    const handleFileUpload = (e) => {
+
+function RegattasForm() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState(initialState);
+  const [displayTotalCash, setDisplayTotalCash] = useState('');
+  const [manualSalesTaxable, setManualSalesTaxable] = useState(false);
+
+
+  // Check login and role status
+  useEffect(() => {
+    const checkAccess = async () => {
+      const user = await getCurrentUser();
+      setUser(user);
+      setLoading(false);
+    };
+    checkAccess();
+  }, []);
+
+  useEffect(() => {
+    if (!manualSalesTaxable) {
+      setForm(prev => ({
+        ...prev,
+        salesTaxable: prev.totalCash
+      }));
+    }
+  }, [form.totalCash, manualSalesTaxable]);
+
+
+
+  // 🔒 Show loading until access is determined
+  if (loading) {
+    return (
+      <div className="p-6">
+        <p className="text-blue-600 font-semibold text-lg">🔄 Checking access...</p>
+      </div>
+    );
+  }
+
+  // ❌ Block if not logged in
+  if (!user) {
+    return (
+      <div className="p-6">
+        <p className="text-red-600 font-semibold text-lg">🚫 Access Denied: You must be logged in to access this page.</p>
+      </div>
+    );
+  }
+
+  // ❌ Block if not an Admin
+  if (!isAdmin()) {
+    return (
+      <div className="p-6">
+        <p className="text-red-600 font-semibold text-lg">🚫 Access Denied: Only Admins can access this page.</p>
+      </div>
+    );
+  }
+
+
+  
+
+  const mapField = (target, label, value) => {
+    const cleanLabel = label.toLowerCase();
+    if (cleanLabel.includes('mo credit sales tax')) target.moCreditSalesTax = value;
+    else if (cleanLabel.includes('mo credit sales')) target.moCreditSales = value;
+    else if (cleanLabel.includes('reg credit sales tax')) target.regCreditSalesTax = value;
+    else if (cleanLabel.includes('reg credit sales')) target.regCreditSales = value;
+    else if (cleanLabel.includes('mo dining dollars tax')) target.moDiningDollarsTax = value;
+    else if (cleanLabel.includes('mo dining dollars')) target.moDiningDollars = value;
+    else if (cleanLabel.includes('sales food - taxable')) target.salesTaxable = value;
+    else if (cleanLabel.includes('sales tax collected')) target.salesTaxCollected = value;
+    else if (cleanLabel.includes('cash over')) target.cashOver = value;
+    else if (cleanLabel.includes('cash short')) target.cashShort = value;
+    else if (cleanLabel.includes('dining loyalty')) target.diningLoyalty = value;
+    else if (cleanLabel.includes('dining dollars')) target.diningDollars = value;
+    else if (cleanLabel.includes('department charges')) target.deptCharges = value;
+  };
+
+const Section = ({ title, children }) => (
+  <div className="mb-10">
+    <h2 className="text-xl font-semibold text-gray-800 mb-2">{title}</h2>
+    <div>{children}</div>
+  </div>
+);
+
+
+  const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
 
     reader.onload = (event) => {
       let values = {};
       const text = event.target.result;
-
-      const lines = text.split('\n').map((line) => line.trim());
-      lines.forEach((line) => {
+      const lines = text.split('\n').map(line => line.trim());
+      lines.forEach(line => {
         const [label, value] = line.split(',');
         if (!label || value === undefined) return;
         mapField(values, label, value);
       });
-
-      setForm((prev) => ({ ...prev, ...values }));
+      setForm(prev => ({ ...prev, ...values }));
     };
 
     if (file.name.endsWith('.xlsx')) {
@@ -150,20 +128,26 @@ function Section({ title, children }) {
     }
   };
 
-  
-const [displayTotalCash, setDisplayTotalCash] = useState('');
-const [manualSalesTaxable, setManualSalesTaxable] = useState(false);
 
 
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm(prev => ({ ...prev, [name]: value }));
+    if (name === 'salesTaxable') {
+      setManualSalesTaxable(true);
+    }
+  };
 
-useEffect(() => {
-  if (!manualSalesTaxable) {
-    setForm(prev => ({
-      ...prev,
-      salesTaxable: prev.totalCash
-    }));
-  }
-}, [form.totalCash, manualSalesTaxable]);
+  const handleClear = () => setForm(initialState);
+  const toNumber = val => parseFloat(val) || 0;
+  const formatCurrency = val => val === '' ? '' : `$${toNumber(val).toFixed(2)}`;
+
+  const calcCaptainsCash = toNumber(form.salesTaxable) + toNumber(form.salesTaxCollected) + toNumber(form.deptCharges);
+  const calcMoCaptainsCash = toNumber(form.moSalesTaxable) + toNumber(form.moSalesTaxCollected);
+  const calcSalesExempt = toNumber(form.diningDollars) + toNumber(form.diningLoyalty) + toNumber(form.deptCharges);
+  const calcMoSalesExempt = toNumber(form.moDiningDollars) + toNumber(form.moDiningDollarsTax);
+  const regCCDepositTotal = toNumber(form.regCreditSales) + toNumber(form.regCreditSalesTax);
+  const moCCDepositTotal = toNumber(form.moCreditSales) + toNumber(form.moCreditSalesTax);
 
   const orgAcctMap = {
   "Bistro": {
@@ -265,36 +249,7 @@ useEffect(() => {
 };
 
 
- const handleChange = (e) => {
-  const { name, value } = e.target;
-
-  setForm(prev => ({ ...prev, [name]: value }));
-
-  if (name === 'salesTaxable') {
-    setManualSalesTaxable(true);
-  }
-};
-
-
-
-
-
-
-  const handleClear = () => setForm(initialState);
-  const toNumber = val => parseFloat(val) || 0;
-  const formatCurrency = val => val === '' ? '' : `$${toNumber(val).toFixed(2)}`;
-
-  const calcCaptainsCash = toNumber(form.salesTaxable) + toNumber(form.salesTaxCollected) + toNumber(form.deptCharges);
-  const calcMoCaptainsCash = toNumber(form.moSalesTaxable) + toNumber(form.moSalesTaxCollected);
-  const calcSalesExempt = toNumber(form.diningDollars) + toNumber(form.diningLoyalty) + toNumber(form.deptCharges);
-
-  const calcMoSalesExempt = toNumber(form.moDiningDollars) + toNumber(form.moDiningDollarsTax);
-  const regCCDepositTotal = toNumber(form.regCreditSales) + toNumber(form.regCreditSalesTax);
-  const moCCDepositTotal = toNumber(form.moCreditSales) + toNumber(form.moCreditSalesTax);
-
   const unitMap = orgAcctMap[form.unit];
-
-
 
 
   return (
