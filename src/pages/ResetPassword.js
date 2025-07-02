@@ -10,29 +10,33 @@ function ResetPassword() {
 
   // Step 1: Read token from URL and set session
   useEffect(() => {
-    const hash = window.location.hash;
-    const params = new URLSearchParams(hash.replace('#', ''));
-    const access_token = params.get('access_token');
-    const refresh_token = params.get('refresh_token');
+  const hash = window.location.hash;
+  const params = new URLSearchParams(hash.replace('#', ''));
+  const access_token = params.get('access_token');
+  const refresh_token = params.get('refresh_token');
 
-    if (access_token && refresh_token) {
-      supabase.auth
-        .setSession({
-          access_token,
-          refresh_token,
-        })
-        .then(({ error }) => {
-          if (error) {
-            console.error('❌ Failed to set session:', error.message);
-            setErrorMsg('Could not verify reset token. Try again.');
-          } else {
-            setSessionReady(true);
-          }
-        });
-    } else {
-      setErrorMsg('Missing reset token in URL. Try the link again.');
-    }
-  }, []);
+  if (access_token && refresh_token) {
+    supabase.auth
+      .setSession({
+        access_token,
+        refresh_token,
+      })
+      .then(({ error }) => {
+        if (error) {
+          console.error('❌ Failed to set session:', error.message);
+          setErrorMsg('Could not verify reset token. Try the link again.');
+        } else {
+          setSessionReady(true);
+        }
+      });
+  } else {
+    // Instead of showing an error every time, just silently do nothing
+    console.info('ℹ️ No reset token found — maybe already used.');
+
+    // Optionally, setSessionReady(true) if you want the form to still show
+  }
+}, []);
+
 
   const handleUpdate = async () => {
     if (!newPassword) {
