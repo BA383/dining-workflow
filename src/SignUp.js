@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
+import { Link } from 'react-router-dom'; // ✅ Make sure this is at the top
+
 
 function SignUp() {
   const navigate = useNavigate();
@@ -24,7 +26,7 @@ function SignUp() {
 const handleSignUp = async () => {
   setError('');
   setSuccess('');
-  setLoading(true); // START
+  setLoading(true);
 
   try {
     const { email, password, role, unit } = form;
@@ -35,27 +37,27 @@ const handleSignUp = async () => {
     }
 
     if (role === 'dining' && !unit) {
-      setError('Dining staff must select a dining unit.');
+      setError('Dining Services must select a unit.');
       return;
     }
 
-    const { data: authData, error: authError } = await supabase.auth.signUp(
-      { email, password },
-      { emailRedirectTo: 'https://dining-workflow-git-main-damians-projects-75fbc5e7.vercel.app/login' } // Use your real domain, NOT localhost
-    );
+    // ✅ Supabase signUp with correct structure
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: 'https://dining-workflow.vercel.app/login' // change for prod
+      }
+    });
 
-    if (authError) {
-      setError('Signup failed: ' + authError.message);
+    if (authError || !authData?.user?.id) {
+      setError('Signup failed: ' + (authError?.message || 'User ID missing.'));
       return;
     }
 
-    const userId = authData.user?.id || authData.session?.user?.id;
+    const userId = authData.user.id;
 
-    if (!userId) {
-      setError('Signup succeeded but user ID was not returned.');
-      return;
-    }
-
+    // ✅ Insert into profiles
     const { error: profileError } = await supabase.from('profiles').insert([
       {
         id: userId,
@@ -66,18 +68,17 @@ const handleSignUp = async () => {
     ]);
 
     if (profileError) {
-      console.error('Profile insert error:', profileError.message);
-      setError('Signup succeeded but failed to create profile.');
+      console.error('❌ Profile insert error:', profileError.message);
+      setError('Signup succeeded but profile creation failed.');
       return;
     }
 
-    setSuccess('✅ Account created! Please check your email to confirm.');
+    setSuccess('✅ Account created! Check your email to confirm.');
     setTimeout(() => navigate('/login'), 3000);
   } finally {
-    setLoading(false); // STOP
+    setLoading(false);
   }
 };
-
 
 
   return (
@@ -142,8 +143,16 @@ const handleSignUp = async () => {
   {loading ? 'Creating Account...' : 'Create Account'}
 </button>
 
-    </div>
-  );
+
+{/* 👇 Add this */}
+    <p className="text-sm text-center mt-4">
+      Already have an account?{' '}
+      <Link to="/login" className="text-blue-600 hover:underline">
+        Log in here
+      </Link>
+    </p>
+  </div>
+);
 }
 
 export default SignUp;

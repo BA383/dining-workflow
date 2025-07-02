@@ -69,24 +69,24 @@ export default function AdminUserManager() {
 };
 
 
-  const handleUpdate = async (user) => {
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        role: user.role,
-        unit: user.unit,
-      })
-      .eq('id', user.id);
+ const handleUpdate = async (updatedUser) => {
+  const { id, role, unit } = updatedUser;
 
-    if (error) {
-      console.error('❌ Update error:', error.message);
-      alert('Update failed.');
-    } else {
-      alert('✅ User updated!');
-      setEditing(null);
-      fetchUsers();
-    }
-  };
+  const { error } = await supabase
+    .from('profiles')
+    .update({ role, unit: role === 'dining' ? unit : null })
+    .eq('id', id);
+
+  if (error) {
+    console.error('❌ Update error:', error.message);
+    alert('Update failed.');
+  } else {
+    alert('✅ User updated!');
+    setEditing(null);
+    fetchUsers(); // refresh
+  }
+};
+
 
   if (!isAdmin()) {
     return <p className="p-6 text-red-600 font-semibold">🚫 Admins only.</p>;
@@ -185,36 +185,40 @@ export default function AdminUserManager() {
                     <option value="dining">Dining</option>
                     <option value="vendor">Vendor</option>
                     <option value="business">Business Office</option>
-                    <option value="group">Group Access</option>
+                    <option value="group">CNU Community</option>
                   </select>
                 ) : (
                   user.role || '—'
                 )}
               </td>
-              <td className="border p-2">
-                {editing === user.id ? (
-                  <select
-                    value={user.unit || ''}
-                    onChange={(e) =>
-                      setUsers((prev) =>
-                        prev.map((u) =>
-                          u.id === user.id ? { ...u, unit: e.target.value } : u
-                        )
-                      )
-                    }
-                  >
-                    <option value="">-- Select --</option>
-                    <option value="Administration">Administration</option>
-                    <option value="Regattas">Regattas</option>
-                    <option value="Commons">Commons</option>
-                    <option value="Discovery">Discovery</option>
-                    <option value="Palette">Palette</option>
-                    <option value="Einstein">Einstein</option>
-                  </select>
-                ) : (
-                  user.unit || '—'
-                )}
-              </td>
+             <td className="border p-2">
+  {editing === user.id ? (
+    user.role === 'dining' ? (
+      <select
+        value={user.unit || ''}
+        onChange={(e) =>
+          setUsers((prev) =>
+            prev.map((u) =>
+              u.id === user.id ? { ...u, unit: e.target.value } : u
+            )
+          )
+        }
+      >
+        <option value="">-- Select Dining Unit --</option>
+        <option value="Commons">Commons</option>
+        <option value="Regattas">Regattas</option>
+        <option value="Discovery">Discovery</option>
+        <option value="Palette">Palette</option>
+        <option value="Einstein">Einstein</option>
+      </select>
+    ) : (
+      <span className="italic text-gray-400">—</span>
+    )
+  ) : (
+    user.unit || '—'
+  )}
+</td>
+
               <td className="border p-2">
                 {editing === user.id ? (
                   <>

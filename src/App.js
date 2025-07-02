@@ -28,6 +28,7 @@ import ResetPassword from './pages/ResetPassword';
 import RunEOMInventory from './pages/RunEOMInventory';
 import ProductionInsights from './pages/ProductionInsights';
 import InvoiceLog from './pages/InvoiceLog'; // adjust path if needed
+import AuthGate from './Components/AuthGate'; // ⬅️ import it at the top
 
 
 
@@ -213,14 +214,31 @@ function AppContent() {
   );
 }
 
+
+
 function App() {
   return (
     <UserRoleProvider>
       <Router>
-        <AppContent />
+        <Routes>
+          {/* Public routes */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<SignUp />} />
+
+          {/* Protected app */}
+          <Route
+            path="*"
+            element={
+              <AuthGate>
+                <AppContent />
+              </AuthGate>
+            }
+          />
+        </Routes>
       </Router>
     </UserRoleProvider>
   );
 }
+
 
 export default App;

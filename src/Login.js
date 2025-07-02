@@ -2,6 +2,8 @@ import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserRoleContext } from './UserRoleContext';
 import { supabase } from './supabaseClient';
+import { Link } from 'react-router-dom';
+
 
 
 
@@ -116,6 +118,15 @@ const handleForgotPassword = async () => {
         >
           Log In
         </button>
+
+<p className="text-sm text-center mt-4">
+  Don’t have an account?{' '}
+  <Link to="/signup" className="text-blue-600 hover:underline">
+    Sign up here
+  </Link>
+</p>
+
+
       </form>
     </div>
   );
