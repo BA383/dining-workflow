@@ -68,7 +68,7 @@ const handleForgotPassword = async () => {
   }
 
   const { error } = await supabase.auth.resetPasswordForEmail(form.email, {
-    redirectTo: 'http://localhost:3000/reset-password' // change for production
+    redirectTo: 'https://dining-workflow.vercel.app/reset-password' // ✅ LIVE domain
   });
 
   if (error) {
@@ -78,6 +78,7 @@ const handleForgotPassword = async () => {
     alert('📬 Password reset email sent. Check your inbox.');
   }
 };
+
 
 
 
