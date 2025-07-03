@@ -55,7 +55,19 @@ const handleSignUp = async () => {
       return;
     }
 
-    const userId = authData.user.id;
+   const { data: userData, error: lookupError } = await supabase
+  .from('users')  // ⚠️ May need a view if RLS blocks this
+  .select('id')
+  .eq('email', email)
+  .single();
+
+if (lookupError || !userData?.id) {
+  setError('Signup succeeded, but could not retrieve user ID. Ask user to confirm email and try logging in.');
+  return;
+}
+
+const userId = userData.id;
+
 
     // ✅ Insert into profiles
     const { error: profileError } = await supabase.from('profiles').insert([

@@ -100,16 +100,6 @@ wasteLogs?.forEach(log => {
 
 
 
-// 🔐 Restrict access to Admins only
-  if (!isAdmin()) {
-    return (
-      <div className="p-6">
-        <p className="text-red-600 font-semibold">🚫 Access Denied: Admins only.</p>
-      </div>
-    );
-  }
-
-
 setWasteSummary(wasteByUnit);
 
 
@@ -307,9 +297,12 @@ if (!logsAllError && logsAll) {
     <div className="p-6 max-w-7xl mx-auto">
       <BackToAdminDashboard />
 
-      {!isAdmin ? (
-        <p className="text-red-600">Access Denied: This report is only visible to administrators.</p>
-      ) : (
+         {/* Wait until user is loaded */}
+    {!user?.role ? (
+      <p className="text-gray-500">Checking permissions...</p>
+    ) : user.role !== 'admin' ? (
+      <p className="text-red-600 font-semibold">🚫 Access Denied: Admins only.</p>
+    ) : (
         <>
           <h1 className="text-3xl font-bold mb-6 text-blue-900">Director's Report Snapshot</h1>
 
