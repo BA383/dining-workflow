@@ -29,6 +29,7 @@ import RunEOMInventory from './pages/RunEOMInventory';
 import ProductionInsights from './pages/ProductionInsights';
 import InvoiceLog from './pages/InvoiceLog'; // adjust path if needed
 import AuthGate from './Components/AuthGate'; // ⬅️ import it at the top
+import ProtectedRoute from './Components/ProtectedRoute';
 
 
 
@@ -188,21 +189,53 @@ function AppContent() {
             <Route path="/login" element={<Login />} />
             <Route path="/inventory/add" element={<InventoryForm />} />
             <Route path="/inventory-table" element={<InventoryTable />} />
-            <Route path="/inventory-dashboard" element={<InventoryDashboard />} />
+            <Route
+  path="/inventory-dashboard"
+  element={
+    <ProtectedRoute>
+      <InventoryDashboard />
+    </ProtectedRoute>
+  }
+/>
+
             <Route path="/inventory-check" element={<InventoryCheckInOut />} />
             <Route path="/inventory-activity" element={<InventoryActivity />} />
             <Route path="/inventory-admin" element={<InventoryAdminTable />} />
             <Route path="/inventory-report" element={<InventoryReport />} />
-            <Route path="/general-report" element={<GeneralReport />} />
+            <Route
+  path="/general-report"
+  element={
+    <ProtectedRoute allowedRoles={['admin']}>
+      <GeneralReport />
+    </ProtectedRoute>
+  }
+/>
             <Route path="/waste-transfer" element={<WasteAndTransferForm />} />
             <Route path="/recipe-conversion" element={<RecipeConversion />} />
             <Route path="/menu-production" element={<MenuProduction />} />
             <Route path="/view-recipes" element={<ViewRecipes />} />
-            <Route path="/admin/users" element={<AdminUserManager />} />
+            <Route
+  path="/admin/users"
+  element={
+    <ProtectedRoute allowedRoles={['admin']}>
+      <AdminUserManager />
+    </ProtectedRoute>
+  }
+/>
+
             <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/run-eom-inventory" element={<RunEOMInventory />} />
+            <Route
+  path="/run-eom-inventory"
+  element={
+    <ProtectedRoute allowedRoles={['admin']}>
+      <RunEOMInventory />
+    </ProtectedRoute>
+  }
+/>
             <Route path="/production-insights" element={<ProductionInsights />} />
             <Route path="/invoice-log" element={<InvoiceLog />} />
+            <Route path="/" element={<Navigate to="/login" />} />
+
           </Routes>
         </main>
       </div>
