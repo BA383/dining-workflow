@@ -1,8 +1,19 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ScanIcon, BanknoteIcon, FileTextIcon, ShieldIcon, BarChartIcon, BookOpenIcon, CalculatorIcon } from 'lucide-react';
+import {
+  ScanIcon,
+  BanknoteIcon,
+  FileTextIcon,
+  ShieldIcon,
+  BarChartIcon,
+  BookOpenIcon,
+  CalculatorIcon
+} from 'lucide-react';
+import { useUser } from '../utils/useUser'; // ✅ make sure this file exists
 
 function QuickAccessToolbar() {
+  const { user } = useUser(); // ✅ now correctly inside the component
+
   return (
     <div className="bg-white shadow-md border-t md:border-none md:shadow-none fixed bottom-0 md:static w-full z-50">
       <div className="max-w-6xl mx-auto flex justify-around md:justify-end gap-6 py-2 px-4">
@@ -27,7 +38,7 @@ function QuickAccessToolbar() {
           Director's Snapshot 
         </Link>
 
-{user?.role === 'admin' && (
+       {user && user.role === 'admin' && (
   <Link to="/run-eom-inventory" className="flex flex-col items-center text-xs text-blue-700 hover:text-blue-900">
     <CalculatorIcon className="h-5 w-5" />
     Run EOM 

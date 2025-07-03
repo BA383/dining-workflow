@@ -21,6 +21,34 @@ import { getCurrentUser } from './utils/userSession';
 
 
 function RegattasForm() {
+
+const initialState = {
+  unit: '',
+  fiscalYear: '',
+  transmittalNumber: '',
+  workDate: '',
+  salesTaxable: '',
+  salesTaxCollected: '',
+  diningDollars: '',
+  diningLoyalty: '',
+  deptCharges: '',
+  moSalesTaxable: '',
+  moSalesTaxCollected: '',
+  moDiningDollarsTax: '',
+  moDiningDollars: '',
+  cashOver: '',
+  cashShort: '',
+  totalCash: '',
+  totalChecks: '',
+  regCreditSales: '',
+  regCreditSalesTax: '',
+  moCreditSales: '',
+  moCreditSalesTax: ''
+}; // ✅ semicolon, not parenthesis
+
+
+
+
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(initialState);
@@ -476,77 +504,83 @@ const Section = ({ title, children }) => (
 </div>
 
  </div>
-      </Section>
-      <Section title="Cash & Check Transactions">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="flex items-center justify-between"></div> 
+ </Section>
 
-<div className="flex items-center justify-between">
-  <input
-    name="cashOver"
-    type="number"
-    placeholder="Cash Over"
-    value={form.cashOver}
-    onChange={handleChange}
-    className="border rounded p-2 w-full"
-  />
-  {form.cashOver !== '' && (
-    <span className="ml-4 text-sm text-gray-600 font-semibold whitespace-nowrap">
-      Cash Over
-    </span>
-  )}
-</div>
-          
-        
-          
-          
-          <div className="flex items-center justify-between">
-  <input
-    name="cashShort"
-    type="number"
-    placeholder="Cash Short"
-    value={form.cashShort}
-    onChange={handleChange}
-    className="border rounded p-2 w-full"
-  />
-  {form.cashShort !== '' && (
-    <span className="ml-4 text-sm text-gray-600 font-semibold whitespace-nowrap">
-      Cash Short
-    </span>
-  )}
-</div>
-<div className="flex items-center justify-between">
- <input
-  name="totalCash"
-  placeholder="Total Cash"
-  value={form.totalCash}
-  onChange={handleChange}
-  className="border rounded p-2 w-full"
-/>
+<Section title="Cash & Check Transactions">
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+    {/* Cash Over */}
+    <div className="flex flex-col">
+      <input
+        name="cashOver"
+        type="number"
+        placeholder="Cash Over"
+        value={form.cashOver}
+        onChange={handleChange}
+        className="border rounded p-2 w-full"
+      />
+      {form.cashOver !== '' && (
+        <span className="mt-1 text-sm text-gray-600 font-semibold">
+          Cash Over
+        </span>
+      )}
+    </div>
+
+    {/* Cash Short */}
+    <div className="flex flex-col">
+      <input
+        name="cashShort"
+        type="number"
+        placeholder="Cash Short"
+        value={form.cashShort}
+        onChange={handleChange}
+        className="border rounded p-2 w-full"
+      />
+      {form.cashShort !== '' && (
+        <span className="mt-1 text-sm text-gray-600 font-semibold">
+          Cash Short
+        </span>
+      )}
+    </div>
+
+    {/* Total Cash */}
+    <div className="flex flex-col">
+      <input
+        name="totalCash"
+        placeholder="Total Cash"
+        value={form.totalCash}
+        onChange={handleChange}
+        className="border rounded p-2 w-full"
+      />
+      {form.totalCash && (
+        <span className="mt-1 text-sm text-gray-600 font-semibold">
+          Total Cash
+        </span>
+      )}
+
+    </div>
+
+    {/* Total Checks */}
+    <div className="flex flex-col">
+      <input
+        name="totalChecks"
+        type="number"
+        placeholder="Total Checks"
+        value={form.totalChecks}
+        onChange={handleChange}
+        className="border rounded p-2 w-full"
+      />
+      {form.totalChecks !== '' && (
+        <span className="mt-1 text-sm text-gray-600 font-semibold">
+          Total Checks
+        </span>
+      )}
+    </div>
+
+  </div>
+</Section>
 
 
-  {form.totalCash && (
-    <span className="ml-4 text-sm text-gray-600 font-semibold whitespace-nowrap">Total Cash</span>
-  )}
-</div>
-
-          <div className="flex items-center justify-between">
-  <input
-    name="totalChecks"
-    type="number"
-    placeholder="Total Checks"
-    value={form.totalChecks}
-    onChange={handleChange}
-    className="border rounded p-2 w-full"
-  />
-  {form.totalChecks !== '' && (
-    <span className="ml-4 text-sm text-gray-600 font-semibold whitespace-nowrap">
-      Total Checks
-    </span>
-  )}
-</div>
-        </div>
-      </Section>
 
       <Section title="Credit Card Transactions">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

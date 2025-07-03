@@ -30,6 +30,8 @@ import ProductionInsights from './pages/ProductionInsights';
 import InvoiceLog from './pages/InvoiceLog'; // adjust path if needed
 import AuthGate from './Components/AuthGate'; // ⬅️ import it at the top
 import ProtectedRoute from './Components/ProtectedRoute';
+import { Navigate } from 'react-router-dom';
+
 
 
 

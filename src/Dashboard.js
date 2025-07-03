@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { isAdmin, isDining } from './utils/permissions';
 import { supabase } from './supabaseClient';
 import dayjs from 'dayjs';
+import { logVisit } from './utils/logVisit'; // Adjust the path if needed
+
 
 
 
@@ -18,7 +20,21 @@ const [docuSignCount, setDocuSignCount] = useState(0);
 const [recentActivity, setRecentActivity] = useState([]);
 
 
-  useEffect(() => {
+  // ✅ First useEffect for visit tracking
+useEffect(() => {
+  const trackVisit = async () => {
+    const { data, error } = await supabase.auth.getUser();
+    const user = data?.user;
+    if (user) {
+      logVisit(user, '/dashboard');
+    }
+  };
+
+  trackVisit();
+}, []);
+
+// ✅ Second useEffect for fetchAlerts
+useEffect(() => {
   const fetchAlerts = async () => {
     const today = dayjs();
     const endOfMonth = today.endOf('month').format('YYYY-MM-DD');
