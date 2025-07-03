@@ -29,7 +29,11 @@ const handleSignUp = async () => {
   setLoading(true);
 
   try {
-    const { email, password, role, unit } = form;
+const email = form.email.trim();
+const password = form.password.trim();
+const role = form.role.trim();
+const unit = form.unit.trim();
+
 
     if (!email || !password || !role) {
       setError('Please fill out all required fields.');
