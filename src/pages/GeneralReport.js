@@ -294,24 +294,24 @@ if (!logsAllError && logsAll) {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <BackToAdminDashboard />
-
-         {/* Wait until user is loaded */}
+  <div className="p-6 max-w-7xl mx-auto">
+    {/* Wait until user is loaded */}
     {!user?.role ? (
       <p className="text-gray-500">Checking permissions...</p>
     ) : user.role !== 'admin' ? (
       <p className="text-red-600 font-semibold">🚫 Access Denied: Admins only.</p>
     ) : (
-        <>
-          <h1 className="text-3xl font-bold mb-6 text-blue-900">Director's Report Snapshot</h1>
+      <>
+        <BackToAdminDashboard />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-            {/* Date Range Filter */}
-            <div className="mb-6">
-              <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 mb-1">
-                Filter Activity by Date Range:
-              </label>
+        <h1 className="text-3xl font-bold mb-6 text-blue-900">Director's Report Snapshot</h1>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+          {/* Date Range Filter */}
+          <div className="mb-6">
+            <label htmlFor="dateRange" className="block text-sm font-medium text-gray-700 mb-1">
+              Filter Activity by Date Range:
+            </label>
               <div className="flex gap-2">
                 <input
                   type="date"
