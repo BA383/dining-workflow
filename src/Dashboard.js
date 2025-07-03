@@ -159,13 +159,13 @@ useEffect(() => {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 md:p-8 max-w-6xl mx-auto">
       <h1 className="text-3xl font-bold mb-6 text-blue-900">
         Dining Workflow ~ Knotted Together for Excellence
       </h1>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <Link to="/invoices" className="bg-white p-4 border rounded shadow hover:shadow-md transition">
           <h2 className="text-lg font-semibold text-blue-800 mb-2">📄 Start New Invoice</h2>
           <p className="text-sm text-gray-600">Submit a new dining invoice form.</p>
@@ -206,7 +206,7 @@ useEffect(() => {
       </div>
 
       {/* Status Boxes */}
-<div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8">
   <div className="bg-green-100 text-green-800 p-4 rounded shadow">
     <h3 className="text-lg font-semibold">✅ Completed Submissions</h3>
     <p className="text-2xl font-bold">{completedCount}</p>
@@ -225,7 +225,7 @@ useEffect(() => {
       {/* Recent Activity */}
       <div className="bg-white p-4 border rounded shadow">
         <h2 className="text-lg font-semibold text-blue-800 mb-4">Recent Activity</h2>
-        <ul className="text-sm text-gray-700 space-y-2">
+        <ul className="text-xs sm:text-sm text-gray-700 space-y-2">
           <li>Invoice #234 submitted - May 15</li>
           <li>Deposit for Regattas submitted - May 14</li>
           <li>Invoice #233 signed via DocuSign - May 13</li>
