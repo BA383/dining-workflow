@@ -6,18 +6,8 @@ import { isAdmin } from './utils/permissions';
 import { getCurrentUser } from './utils/userSession';
 
 
-
-
   // ✅ Access granted
-  const initialState = {
-    unit: 'Regattas', fiscalYear: '', transmittalNumber: '', workDate: '',
-    salesTaxable: '', checkSales: '', checkSalesTax: '', salesTaxCollected: '',
-    moSalesTaxable: '', moSalesTaxCollected: '', moDiningDollarsTax: '',
-    cashOver: '', cashShort: '', diningDollars: '', moDiningDollars: '',
-    deptCharges: '', diningLoyalty: '', totalCash: '', totalChecks: '',
-    regCreditSales: '', moCreditSales: '', regCreditSalesTax: '', moCreditSalesTax: ''
-  };
-
+  
 
 
 function RegattasForm() {
@@ -277,7 +267,7 @@ const Section = ({ title, children }) => (
 };
 
 
-  const unitMap = orgAcctMap[form.unit];
+const unitMap = orgAcctMap[form.unit] || {};
 
 
   return (
@@ -328,7 +318,8 @@ const Section = ({ title, children }) => (
           <input name="workDate" type="date" value={form.workDate} onChange={handleChange} className="border rounded p-2" />
         </div>
         <div className="text-sm text-gray-600 mt-2">
-          Example Organization & Acct Code: <strong>{unitMap.taxable}</strong>
+          Example Organization & Acct Code: <strong>{unitMap?.taxable || 'N/A'}</strong>
+
         </div>
       </Section>
 
