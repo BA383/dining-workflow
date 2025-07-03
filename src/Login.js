@@ -35,6 +35,10 @@ const handleLogin = async (e) => {  // ✅ UPDATED LINE
     return;
   }
 
+console.log('Auth user ID:', authUser.id);
+
+
+
   // Step 2: Fetch profile metadata (role and unit)
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
