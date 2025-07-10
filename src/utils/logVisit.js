@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient';
 
+
 export const logVisit = async (user, page) => {
   if (!user) return;
 

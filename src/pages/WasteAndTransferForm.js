@@ -1,90 +1,121 @@
-// WasteAndTransferForm.js (Shared Component for Waste & Transfer)
-import React, { useState } from 'react';
+// WasteAndTransferForm.js (Enhanced Version)
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { isAdmin, isDining } from '../utils/permissions'; // adjust path as needed
+import { isAdmin, isDining } from '../utils/permissions';
 import BackToInventoryDashboard from '../Components/BackToInventoryDashboard';
 import { getCurrentUser, setRLSContext } from '../utils/userSession';
+import Select from 'react-select';
 
 function WasteAndTransferForm({ user }) {
   const [form, setForm] = useState({
     sku: '',
     name: '',
     quantity: '',
+    unitOfMeasure: '',
     reason: '',
     toUnit: '',
     notes: '',
-    actionType: 'waste', // 'waste' or 'transfer'
+    actionType: 'waste',
+    selectedDiningUnit: '',
   });
 
-  const diningUnit = user?.unit || 'Unknown';
-
-  if (!isAdmin() && !isDining()) {
-    return (
-      <div className="p-6">
-        <p className="text-red-600 font-semibold">🚫 Inventory is for Dining staff only.</p>
-      </div>
-    );
-  }
+  const [availableUnits, setAvailableUnits] = useState([
+    'Discovery', 'Regattas', 'Commons', 'Palette', 'Einstein'
+  ]);
+  const [inventoryOptions, setInventoryOptions] = useState([]);
+  const [itemOptions, setItemOptions] = useState([]);
 
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  const { sku, name, quantity, reason, toUnit, notes, actionType } = form;
-  const qty = Number(quantity);
-  const timestamp = new Date().toISOString();
+  const isAdminUser = isAdmin();
+  const isDiningUser = isDining();
 
-  if (!sku || qty <= 0) return alert('Please fill in valid SKU and quantity');
 
-  // ✅ Ensure user info is fresh and RLS context is set
-  const currentUser = await getCurrentUser();
-  if (!currentUser) return alert('User not authenticated.');
+    useEffect(() => {
+    const fetchItems = async () => {
+      const unit = isAdminUser ? form.selectedDiningUnit : user?.unit;
+      if (!unit) return;
 
-  await setRLSContext(currentUser.unit, currentUser.role);
+      const { data, error } = await supabase
+        .from('inventory')
+        .select('sku, name, unit')
+        .eq('dining_unit', unit);
 
-  const diningUnit = currentUser.unit;
-  const email = currentUser.email;
+      if (error) {
+        console.error('❌ Failed to fetch inventory:', error.message);
+        return;
+      }
 
-  try {
-// ✅ Always insert into waste_logs or inventory_transfers first
-let entryError = null;
+      setItemOptions(data || []);
+    };
 
-if (actionType === 'waste') {
-  const { error } = await supabase.from('waste_logs').insert([{
-    sku,
-    name,
-    quantity: qty,
-    reason,
-    notes,
-    dining_unit: diningUnit,
-    email: currentUser.email,
-    timestamp
-  }]);
-  entryError = error;
-}
+    fetchItems();
+  }, [form.selectedDiningUnit, user?.unit]);
 
-if (actionType === 'transfer') {
-  const { error } = await supabase.from('inventory_transfers').insert([{
-    sku,
-    qty,
-    dining_unit: diningUnit, // ✅ matches existing schema
-    to_unit: toUnit,
-    notes,
-    timestamp
-  }]);
-  entryError = error;
-}
 
-if (entryError) {
-  alert(`Failed to record ${actionType}`);
-  console.error(entryError.message);
-  return;
-}
+  useEffect(() => {
+    const loadInventory = async () => {
+      const unit = isAdminUser ? form.selectedDiningUnit : user?.unit;
+      if (!unit) return;
 
-// ✅ Insert into inventory_logs so the General Report picks it up
-const logEntries = [
+      const { data, error } = await supabase
+        .from('inventory')
+        .select('sku, name, unitOfMeasure')
+        .eq('dining_unit', unit);
+
+      if (!error) setInventoryOptions(data);
+    };
+    loadInventory();
+  }, [form.selectedDiningUnit]);
+
+
+
+  
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const {
+      sku, name, quantity, reason, toUnit, notes,
+      actionType, unitOfMeasure, selectedDiningUnit
+    } = form;
+
+    const qty = Number(quantity);
+    const timestamp = new Date().toISOString();
+    if (!sku || qty <= 0) return alert('Please fill in valid SKU and quantity');
+
+    const currentUser = await getCurrentUser();
+    if (!currentUser) return alert('User not authenticated.');
+
+    const diningUnit = isAdminUser ? selectedDiningUnit : currentUser.unit;
+    if (!diningUnit) return alert('Please select a dining unit.');
+
+    await setRLSContext(diningUnit, currentUser.role);
+
+    let entryError = null;
+    if (actionType === 'waste') {
+      const { error } = await supabase.from('waste_logs').insert([{
+        sku, quantity: qty, reason, notes,
+        dining_unit: diningUnit, email: currentUser.email, timestamp
+      }]);
+      entryError = error;
+    }
+
+    if (actionType === 'transfer') {
+      const { error } = await supabase.from('inventory_transfers').insert([{
+        sku, qty, dining_unit: diningUnit, to_unit: toUnit,
+        notes, timestamp
+      }]);
+      entryError = error;
+    }
+
+    if (entryError) {
+      alert(`Failed to record ${actionType}`);
+      console.error(entryError.message);
+      return;
+    }
+
+ const logEntries = [
   {
     sku,
-    name,
     quantity: qty,
     action: actionType === 'waste' ? 'waste' : 'transfer_out',
     dining_unit: diningUnit,
@@ -92,13 +123,13 @@ const logEntries = [
     target_unit: actionType === 'transfer' ? toUnit : null,
     email: currentUser.email,
     timestamp,
+    notes,
   }
 ];
 
 if (actionType === 'transfer') {
   logEntries.push({
     sku,
-    name,
     quantity: qty,
     action: 'transfer_in',
     dining_unit: toUnit,
@@ -106,53 +137,83 @@ if (actionType === 'transfer') {
     target_unit: null,
     email: currentUser.email,
     timestamp,
+    notes,
   });
 }
 
-const { error: logError } = await supabase.from('inventory_logs').insert(logEntries);
 
-if (logError) {
-  alert(`Failed to log ${actionType} in inventory logs.`);
-  console.error(logError.message);
-  return;
-}
+    const { error: logError } = await supabase.from('inventory_logs').insert(logEntries);
+    if (logError) {
+      alert(`Failed to log ${actionType} in inventory logs.`);
+      console.error(logError.message);
+      return;
+    }
 
-alert('✅ Entry recorded');
-setForm({ sku: '', name: '', quantity: '', reason: '', toUnit: '', notes: '', actionType });
-
-
-  } catch (err) {
-    console.error('❌ Error submitting entry:', err.message);
-    alert('Failed to record ' + actionType);
-  }
-};
-
-
+    alert('✅ Entry recorded');
+    setForm({ sku: '', name: '', quantity: '', unitOfMeasure: '', reason: '', toUnit: '', notes: '', actionType: 'waste', selectedDiningUnit: '' });
+  };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <BackToInventoryDashboard /> 
+      <BackToInventoryDashboard />
+
+      {isAdminUser && (
+        <select value={form.selectedDiningUnit} onChange={(e) => setForm({ ...form, selectedDiningUnit: e.target.value })} className="border rounded p-2 w-full">
+          <option value="">Select Dining Unit</option>
+          {availableUnits.map(unit => <option key={unit} value={unit}>{unit}</option>)}
+        </select>
+      )}
+
       <select value={form.actionType} onChange={(e) => setForm({ ...form, actionType: e.target.value })} className="border rounded p-2 w-full">
         <option value="waste">Waste</option>
         <option value="transfer">Transfer</option>
       </select>
-      <input type="text" placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="border p-2 rounded w-full" />
-      <input type="text" placeholder="Item Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="border p-2 rounded w-full" />
+
+     <Select
+  options={itemOptions.map(item => ({
+    value: item.sku,
+    label: `${item.sku} – ${item.name}`,
+    unit: item.unit
+  }))}
+  onChange={(selected) => {
+    setForm({
+      ...form,
+      sku: selected?.value || '',
+      name: selected?.label?.split('–')[1]?.trim() || '',
+      unit_of_measure: selected?.unit || '',
+    });
+  }}
+  placeholder="Search by SKU or Item Name..."
+  isClearable
+  isSearchable
+  className="w-full"
+/>
+
+
+      <input type="text" placeholder="Item Name" value={form.name} readOnly className="border p-2 rounded w-full bg-gray-100" />
       <input type="number" placeholder="Quantity" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} className="border p-2 rounded w-full" />
+
+      <select value={form.unitOfMeasure} onChange={(e) => setForm({ ...form, unitOfMeasure: e.target.value })} className="border p-2 rounded w-full">
+        <option value="">Select Unit of Measure</option>
+        <option value="each">Each</option>
+        <option value="case">Case</option>
+        <option value="lb">Pound</option>
+        <option value="oz">Ounce</option>
+      </select>
 
       {form.actionType === 'waste' && (
         <input type="text" placeholder="Reason for Waste" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} className="border p-2 rounded w-full" />
       )}
+
       {form.actionType === 'transfer' && (
         <select value={form.toUnit} onChange={(e) => setForm({ ...form, toUnit: e.target.value })} className="border p-2 rounded w-full">
           <option value="">Select Target Unit</option>
-          <option value="Discovery">Discovery</option>
-          <option value="Regattas">Regattas</option>
-          <option value="Commons">Commons</option>
-          <option value="Palette">Palette</option>
-          <option value="Einstein">Einstein</option>
+          {availableUnits.filter(u => u !== (isAdminUser ? form.selectedDiningUnit : user.unit)).map(unit => (
+            <option key={unit} value={unit}>{unit}</option>
+          ))}
         </select>
       )}
+
       <textarea placeholder="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="border p-2 rounded w-full" />
       <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded">Submit</button>
     </form>

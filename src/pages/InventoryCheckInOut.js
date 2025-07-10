@@ -233,6 +233,22 @@ if (!isAdmin() && !isDining()) {
     timestamp: new Date(),
   }]);
 
+
+if (action === 'waste') {
+  const now = new Date();
+  await supabase.from('waste_logs').insert([{
+    sku: form.sku,
+    quantity: form.quantity,
+    dining_unit: unitToQuery,
+    email: user.email,
+    timestamp: now,
+    month: now.toLocaleString('en-US', { month: 'short' }).toUpperCase(), // e.g. 'JUL'
+    year: now.getFullYear(),
+  }]);
+}
+
+
+
   // Update UI
   const updatedItems = items.map(item =>
     item.sku === form.sku ? { ...item, qty_on_hand: newQty } : item

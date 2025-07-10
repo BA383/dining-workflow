@@ -295,10 +295,13 @@ const unitMap = orgAcctMap[form.unit] || {};
           </select>
           <input name="fiscalYear" placeholder="Fiscal Year" value={form.fiscalYear} onChange={handleChange} className="border rounded p-2" />
           <div className="mt-4">
+
   <details className="bg-yellow-100 rounded p-4">
-    <summary className="font cursor-pointer text-blue-600 hover:underline">
-      View Org & Acct Code Reference for {form.unit}
-    </summary>
+  <summary className="font cursor-pointer text-blue-600 hover:underline">
+    View Org & Acct Code Reference for {form.unit || '—'}
+  </summary>
+
+  {Object.keys(unitMap).length > 0 ? (
     <ul className="list-disc pl-6 mt-3 text-sm text-gray-700 space-y-1">
       <li>{unitMap.taxable}</li>
       <li>{unitMap.exempt}</li>
@@ -311,7 +314,11 @@ const unitMap = orgAcctMap[form.unit] || {};
       <li>{unitMap.cc}</li>
       <li>{unitMap.ccTax}</li>
     </ul>
-  </details>
+  ) : (
+    <p className="text-sm text-red-600 mt-2">⚠️ No unit selected or data missing.</p>
+  )}
+</details>
+
 </div>
 
           <input name="transmittalNumber" placeholder="Transmittal #" value={form.transmittalNumber} onChange={handleChange} className="border rounded p-2" />

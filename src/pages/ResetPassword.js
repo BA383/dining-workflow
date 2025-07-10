@@ -79,6 +79,7 @@ function ResetPassword() {
     }
 
     alert('✅ Password updated! You can now log in.');
+    
     navigate('/login');
   };
 
