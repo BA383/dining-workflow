@@ -38,25 +38,24 @@ export default function AdminUserManager() {
     return;
   }
 
-  // 🔍 Step 2: Get Supabase Auth user ID by email
-  const { data: userRecord, error: lookupError } = await supabase
-    .from('users') // 👈 You may need a Supabase function/view to expose this if RLS is blocking direct access
-    .select('id')
-    .eq('email', newUser.email)
-    .single();
+ // 🔍 Step 2: Get Supabase Auth user ID by email
+const { data: userId, error: lookupError } = await supabase
+  .rpc('get_user_id_by_email', { input_email: newUser.email });
 
-  if (lookupError || !userRecord) {
-    alert('⚠️ Email not found. Ask the user to sign up first.');
-    return;
-  }
+if (lookupError || !userId) {
+  alert('⚠️ Email not found. Ask the user to sign up first.');
+  return;
+}
 
-  // ✅ Step 3: Insert into profiles with correct ID
-  const { error } = await supabase.from('profiles').insert([{
-    id: userRecord.id,
-    email: newUser.email,
-    role: newUser.role,
-    unit: newUser.unit || null
-  }]);
+
+ // ✅ Step 3: Insert into profiles with correct ID
+const { error } = await supabase.from('profiles').insert([{
+  id: userId,
+  email: newUser.email,
+  role: newUser.role,
+  unit: newUser.unit || null
+}]);
+
 
   if (error) {
     alert('❌ Failed to add user: ' + error.message);
