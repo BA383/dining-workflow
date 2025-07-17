@@ -31,8 +31,7 @@ import InvoiceLog from './pages/InvoiceLog'; // adjust path if needed
 import AuthGate from './Components/AuthGate'; // ⬅️ import it at the top
 import ProtectedRoute from './Components/ProtectedRoute';
 import { Navigate } from 'react-router-dom';
-
-
+import PageTracker from './Components/PageTracker'; // adjust the path if needed
 
 
 
@@ -179,6 +178,8 @@ function AppContent() {
 
         {/* Main content area */}
         <main className="flex-1 bg-gray-100 p-8 overflow-auto">
+        <PageTracker />  {/* ✅ Add this line here */}
+        
           <Routes>
             <Route index element={<Dashboard />} />
             <Route path="/deposit" element={<RegattasForm />} />
