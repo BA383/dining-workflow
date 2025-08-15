@@ -6,6 +6,7 @@ function GroupEntryForm() {
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
+    serviceType: '',
     todayDate: '',
     eventDate: '',
     eventTime: '',
@@ -19,7 +20,9 @@ function GroupEntryForm() {
     mealType: '',
     unitPrice: '',
     totalCost: '',
-    memo: ''
+    memo: '',
+    eventType: '',
+    externalOrg: ''
   });
 
   useEffect(() => {
@@ -34,7 +37,6 @@ function GroupEntryForm() {
   };
 
   const handleSubmit = () => {
-    // Navigate to Invoice Preview
     navigate('/invoice-preview', {
       state: {
         ...form,
@@ -43,51 +45,220 @@ function GroupEntryForm() {
     });
   };
 
+  const isCatering = form.serviceType === 'catering';
+
+  const handleClear = () => {
+  setForm({
+    serviceType: '',
+    todayDate: '',
+    eventDate: '',
+    eventTime: '',
+    department: '',
+    accountNumber: '',
+    requesterName: '',
+    requesterEmail: '',
+    requesterPhone: '',
+    guestCount: '',
+    venue: '',
+    mealType: '',
+    unitPrice: '',
+    totalCost: '',
+    memo: '',
+    eventType: '',
+    externalOrg: ''
+  });
+};
+const diningVenues = [
+  'Commons',
+  'Regattas',
+  'Discovery Café',
+  "Einstein's",
+  'F.I.T',
+  'Palette'
+];
+
+const cateringVenues = [
+  'Ballroom',
+  'Outdoor',
+  'Library',
+  'Classroom',
+  'Theater',
+  'Banquet Hall',
+  'Other'
+];
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <BackToAdminDashboard />
-      <h1 className="text-2xl font-bold text-blue-900 mb-6">CNU Internal Group Entry Form</h1>
+      <h1 className="text-2xl font-bold text-blue-900 mb-2">
+  {isCatering ? 'Catering Event Request Form' : 'Dining & Event Services Request Form'}
+</h1>
+<p className="text-gray-700 mb-6">
+  {isCatering
+    ? 'Use this form to initiate event catering services.'
+    : 'Use this form to request internal dining arrangements.'}
+</p>
+
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <input type="date" name="todayDate" value={form.todayDate} onChange={handleChange} placeholder="Today's Date" className="border p-2 rounded" />
-        <input type="date" name="eventDate" value={form.eventDate} onChange={handleChange} placeholder="Event Date" className="border p-2 rounded" />
-        <input type="time" name="eventTime" value={form.eventTime} onChange={handleChange} placeholder="Event Time" className="border p-2 rounded" />
-        <input type="text" name="department" value={form.department} onChange={handleChange} placeholder="Department Name" className="border p-2 rounded" />
-        <input type="text" name="accountNumber" value={form.accountNumber} onChange={handleChange} placeholder="Account Number" className="border p-2 rounded" />
-        <input type="text" name="requesterName" value={form.requesterName} onChange={handleChange} placeholder="Requester Name" className="border p-2 rounded" />
-        <input type="email" name="requesterEmail" value={form.requesterEmail} onChange={handleChange} placeholder="Requester Email" className="border p-2 rounded" />
-        <input type="text" name="requesterPhone" value={form.requesterPhone} onChange={handleChange} placeholder="Phone Ext." className="border p-2 rounded" />
-        <input type="number" name="guestCount" value={form.guestCount} onChange={handleChange} placeholder="# of Guests (Guaranteed)" className="border p-2 rounded" />
-
-        <select name="venue" value={form.venue} onChange={handleChange} className="border p-2 rounded">
-          <option value="">Select Venue</option>
-          <option>Commons</option>
-          <option>Regattas</option>
-          <option>Discovery Café</option>
-          <option>Einstein's</option>
-          <option>F.I.T</option>
-          <option>Palette</option>
+        <select name="serviceType" value={form.serviceType} onChange={handleChange} className="border p-2 rounded">
+          <option value="">Select Service Type</option>
+          <option value="dining">Dining Services</option>
+          <option value="catering">Catering Event</option>
         </select>
 
-        <select name="mealType" value={form.mealType} onChange={handleChange} className="border p-2 rounded">
-          <option value="">Select Meal Type</option>
+        <div>
+          <label className="font-medium">Date of Request</label>
+          <input type="date" name="todayDate" value={form.todayDate} onChange={handleChange} className="border p-2 rounded w-full" />
+        </div>
+        <div>
+          <label className="font-medium">Anticipated Event Date</label>
+          <input type="date" name="eventDate" value={form.eventDate} onChange={handleChange} className="border p-2 rounded w-full" />
+        </div>
+        <div>
+          <label className="font-medium">Anticipated Event Start Time</label>
+          <input type="time" name="eventTime" value={form.eventTime} onChange={handleChange} className="border p-2 rounded w-full" />
+        </div>
+
+        {isCatering && (
+          <input type="text" name="externalOrg" value={form.externalOrg} onChange={handleChange} placeholder="Organization / Company Name" className="border p-2 rounded" />
+        )}
+
+        <div>
+          <label className="font-medium">Department / Office</label>
+          <input type="text" name="department" value={form.department} onChange={handleChange} className="border p-2 rounded w-full" />
+        </div>
+        <div>
+          <label className="font-medium">CNU Account Number</label>
+          <input type="text" name="accountNumber" value={form.accountNumber} onChange={handleChange} className="border p-2 rounded w-full" />
+        </div>
+
+        <div>
+          <label className="font-medium">Full Name</label>
+          <input type="text" name="requesterName" value={form.requesterName} onChange={handleChange} className="border p-2 rounded w-full" />
+        </div>
+        <div>
+          <label className="font-medium">Email Address</label>
+          <input type="email" name="requesterEmail" value={form.requesterEmail} onChange={handleChange} className="border p-2 rounded w-full" />
+        </div>
+        <div>
+          <label className="font-medium">Phone Extension / Contact Number</label>
+          <input type="text" name="requesterPhone" value={form.requesterPhone} onChange={handleChange} className="border p-2 rounded w-full" />
+        </div>
+
+        <div>
+          <label className="font-medium">Guaranteed Guest Count</label>
+          <input type="number" name="guestCount" value={form.guestCount} onChange={handleChange} className="border p-2 rounded w-full" />
+        </div>
+
+    
+
+  {/* Venue Selection */}
+  <div>
+    <label className="block font-semibold mb-1">Venue</label>
+    <select
+      name="venue"
+      value={form.venue}
+      onChange={handleChange}
+      className="border p-2 rounded w-full"
+    >
+      <option value="">-- Select Venue --</option>
+      {(isCatering ? cateringVenues : diningVenues).map((venue) => (
+        <option key={venue} value={venue}>
+          {venue}
+        </option>
+      ))}
+    </select>
+  </div>
+
+  {/* Meal Type or Event Type */}
+  <div>
+    <label className="block font-semibold mb-1">
+      {isCatering ? 'Event Type' : 'Meal Type'}
+    </label>
+    <select
+      name={isCatering ? 'eventType' : 'mealType'}
+      value={isCatering ? form.eventType : form.mealType}
+      onChange={handleChange}
+      className="border p-2 rounded w-full"
+    >
+      <option value="">-- Select {isCatering ? 'Event Type' : 'Meal Type'} --</option>
+      {isCatering ? (
+        <>
+          <option>Wedding</option>
+          <option>Seminar</option>
+          <option>Graduation</option>
+          <option>Homegoing Service</option>
+          <option>Banquet</option>
+          <option>Other</option>
+        </>
+      ) : (
+        <>
           <option>Breakfast</option>
           <option>Brunch</option>
           <option>Lunch</option>
           <option>Dinner</option>
-        </select>
+        </>
+      )}
+    </select>
+  </div>
 
-        <input type="text" name="unitPrice" value={form.unitPrice} readOnly placeholder="Unit Price ($)" className="border bg-gray-100 p-2 rounded" />
-        <input type="text" name="totalCost" value={form.totalCost} readOnly placeholder="Total Cost ($)" className="border bg-gray-100 p-2 rounded" />
+  {/* Unit Price */}
+  <div>
+    <label className="block font-semibold mb-1">Unit Price ($)</label>
+    <input
+      type="text"
+      name="unitPrice"
+      value={form.unitPrice}
+      readOnly
+      className="border bg-gray-100 p-2 rounded w-full"
+    />
+  </div>
 
-        <textarea name="memo" value={form.memo} onChange={handleChange} placeholder="Memo / Attendees Info" rows={4} className="border p-2 rounded md:col-span-2"></textarea>
-      </div>
+  {/* Total Cost */}
+  <div>
+    <label className="block font-semibold mb-1">Total Cost ($)</label>
+    <input
+      type="text"
+      name="totalCost"
+      value={form.totalCost}
+      readOnly
+      className="border bg-gray-100 p-2 rounded w-full"
+    />
+  </div>
 
-      <div className="mt-6">
-        <button onClick={handleSubmit} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-          Submit Group Entry
-        </button>
-      </div>
+  {/* Memo */}
+  <div className="md:col-span-2">
+    <label className="block font-semibold mb-1">Memo / Attendees Info</label>
+    <textarea
+      name="memo"
+      value={form.memo}
+      onChange={handleChange}
+      placeholder="Add notes about attendees, setup details, or other instructions"
+      rows={4}
+      className="border p-2 rounded w-full"
+    />
+  </div>
+
+</div>
+
+
+      <div className="mt-6 flex gap-4">
+  <button
+    onClick={handleSubmit}
+    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+  >
+    Submit Request
+  </button>
+
+  <button
+    onClick={handleClear}
+    className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+  >
+    Clear All Fields 
+  </button>
+</div>
+
     </div>
   );
 }
