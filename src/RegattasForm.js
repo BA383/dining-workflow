@@ -200,7 +200,7 @@ function RegattasForm() {
         className="border p-2 rounded mb-4"
       />
       {(form.salesTaxable || form.salesTaxCollected || form.diningDollars) ? (
-        <p className="text-green-600 text-sm mt-2">✅ Form populated from uploaded file.</p>
+        <p className="text-green-600 text-sm mt-2">✅ Deposit data entry in progress or populated from upload.</p>
       ) : null}
 
       {/* Header */}
