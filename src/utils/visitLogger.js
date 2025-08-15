@@ -1,7 +1,7 @@
 // src/utils/visitLogger.js
 // This utility file page is used to track visits of users to different pages in the application. 
 // src/utils/visitLogger.js
-import { supabase } from '../supabaseClient';
+import { supabase } from '.././supabaseClient';
 
 /**
  * Logs a user's page visit into the `visits` table.
