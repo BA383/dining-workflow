@@ -1,102 +1,151 @@
-import React, { useState, useEffect } from 'react';
+// src/GroupEntryForm.js
+import React, {
+  useState,
+  useMemo,
+  useRef,
+  useImperativeHandle,
+  forwardRef,
+  useCallback,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 import BackToAdminDashboard from './BackToAdminDashboard';
 
-function GroupEntryForm() {
-  const navigate = useNavigate();
+// --- Caret-safe input: preserves cursor position even when parent re-renders ---
+const CaretInput = forwardRef(function CaretInput({ onChange, ...props }, ref) {
+  const innerRef = useRef(null);
+  useImperativeHandle(ref, () => innerRef.current);
 
- const [form, setForm] = useState({
-  serviceType: '',
-  todayDate: '',
-  eventDate: '',
-  eventTime: '',
-  eventStartTime: '',
-  eventEndTime: '',
-  eventFunction: '',
-  eventTitle: '',
-  rentalStartDate: '',
-  rentalEndDate: '',
-  department: '',
-  accountNumber: '',
-  requesterName: '',
-  requesterEmail: '',
-  requesterPhone: '',
-  guestCount: '',
-  venue: '',
-  mealType: '',
-  eventType: '',
-  unitPrice: '',
-  totalCost: '',
-  memo: '',
-  externalOrg: '',
-  roomCount: '',
-  assignedRooms: '',
-  desiredSetup: '',
-  depositAmount: '',
-  depositDueDate: '',
-  finalPaymentAmount: '',
-  reservationEstimate: '',
-  contractDueAmount: '',
-  contractDueDate: '',
-  billingAddress: '',
-  licenseePhone: '',
-  federalId: '',
-  proposalNumber: '',
-  salesRep: '',
-  eventPocName: '',
-  eventPocEmail: '',
+  const handleChange = useCallback(
+    (e) => {
+      const el = innerRef.current;
+      const start = el?.selectionStart ?? null;
+      const end = el?.selectionEnd ?? null;
+
+      // update parent state
+      onChange?.(e);
+
+      // restore caret after value updates
+      requestAnimationFrame(() => {
+        if (el && document.activeElement === el && start !== null && end !== null) {
+          try {
+            el.setSelectionRange(start, end);
+          } catch {
+            // some input types (date/number in some browsers) may not support selection
+          }
+        }
+      });
+    },
+    [onChange]
+  );
+
+  return <input ref={innerRef} onChange={handleChange} {...props} />;
 });
 
-
-  useEffect(() => {
-  const price = form.mealType === 'Breakfast' ? 11.79 : form.mealType ? 13.68 : '';
-  const guests = parseInt(form.guestCount);
-  const total = price && guests ? (price * guests).toFixed(2) : '';
-
-  setForm(prev => ({
-    ...prev,
-    unitPrice: price,
-    totalCost: total,
-  }));
-}, [form.mealType, form.guestCount]);
-
-const handleChange = (e) => {
-  const { name, value } = e.target;
-  setForm(prev => ({ ...prev, [name]: value }));
-};
-
-
-const LabelInput = ({ label, name, type = "text", value, onChange, placeholder }) => (
+// --- Label wrapper using CaretInput ---
+const LabelInput = ({
+  label,
+  name,
+  type = 'text',
+  value,
+  onChange,
+  placeholder,
+  readOnly = false,
+}) => (
   <div>
-    <label htmlFor={name} className="block font-semibold mb-1">{label}</label>
-    <input
+    <label htmlFor={name} className="block font-semibold mb-1">
+      {label}
+    </label>
+    <CaretInput
       id={name}
       name={name}
       type={type}
-      value={value}
+      value={value ?? ''} // keep controlled
       onChange={onChange}
       placeholder={placeholder}
-      className="border p-2 rounded w-full"
+      readOnly={readOnly}
+      className={`border p-2 rounded w-full ${readOnly ? 'bg-gray-100' : ''}`}
+      autoComplete="off"
     />
   </div>
 );
 
+function GroupEntryForm() {
+  const navigate = useNavigate();
 
+  // Single, stable form state (no derived values here)
+  const [form, setForm] = useState({
+    serviceType: '',
+    todayDate: '',
+    eventDate: '',
+    eventTime: '',
+    eventStartTime: '',
+    eventEndTime: '',
+    eventFunction: '',
+    eventTitle: '',
+    rentalStartDate: '',
+    rentalEndDate: '',
+    department: '',
+    accountNumber: '',
+    requesterName: '',
+    requesterEmail: '',
+    requesterPhone: '',
+    guestCount: '',
+    venue: '',
+    mealType: '',
+    eventType: '',
+    memo: '',
+    externalOrg: '',
+    roomCount: '',
+    assignedRooms: '',
+    desiredSetup: '',
+    depositAmount: '',
+    depositDueDate: '',
+    finalPaymentAmount: '',
+    reservationEstimate: '',
+    contractDueAmount: '',
+    contractDueDate: '',
+    billingAddress: '',
+    licenseePhone: '',
+    federalId: '',
+    proposalNumber: '',
+    salesRep: '',
+    eventPocName: '',
+    eventPocEmail: '',
+    documentUpload: null, // important for stable shape
+  });
 
+  const isCatering = form.serviceType === 'catering';
+
+  // Derived values (don’t write them into state)
+  const unitPrice = useMemo(() => {
+    if (!form.mealType) return '';
+    return form.mealType === 'Breakfast' ? '11.79' : '13.68';
+  }, [form.mealType]);
+
+  const totalCost = useMemo(() => {
+    const guests = Number.parseInt(form.guestCount, 10);
+    if (!unitPrice || !guests || Number.isNaN(guests)) return '';
+    return (parseFloat(unitPrice) * guests).toFixed(2);
+  }, [unitPrice, form.guestCount]);
+
+  const handleChange = (e) => {
+    const { name, value, type, files } = e.target;
+    setForm((prev) => ({
+      ...prev,
+      [name]: type === 'file' ? (files?.[0] ?? null) : value,
+    }));
+  };
 
   const handleSubmit = () => {
     navigate('/invoice-preview', {
       state: {
         ...form,
-        todayDate: new Date().toLocaleDateString()
-      }
+        unitPrice,
+        totalCost,
+        todayDate: new Date().toLocaleDateString(),
+      },
     });
   };
-
-
-
-  
-  const isCatering = form.serviceType === 'catering';
 
   const handleClear = () => {
     setForm({
@@ -104,6 +153,12 @@ const LabelInput = ({ label, name, type = "text", value, onChange, placeholder }
       todayDate: '',
       eventDate: '',
       eventTime: '',
+      eventStartTime: '',
+      eventEndTime: '',
+      eventFunction: '',
+      eventTitle: '',
+      rentalStartDate: '',
+      rentalEndDate: '',
       department: '',
       accountNumber: '',
       requesterName: '',
@@ -112,11 +167,26 @@ const LabelInput = ({ label, name, type = "text", value, onChange, placeholder }
       guestCount: '',
       venue: '',
       mealType: '',
-      unitPrice: '',
-      totalCost: '',
-      memo: '',
       eventType: '',
-      externalOrg: ''
+      memo: '',
+      externalOrg: '',
+      roomCount: '',
+      assignedRooms: '',
+      desiredSetup: '',
+      depositAmount: '',
+      depositDueDate: '',
+      finalPaymentAmount: '',
+      reservationEstimate: '',
+      contractDueAmount: '',
+      contractDueDate: '',
+      billingAddress: '',
+      licenseePhone: '',
+      federalId: '',
+      proposalNumber: '',
+      salesRep: '',
+      eventPocName: '',
+      eventPocEmail: '',
+      documentUpload: null,
     });
   };
 
@@ -136,168 +206,177 @@ const LabelInput = ({ label, name, type = "text", value, onChange, placeholder }
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <select name="serviceType" value={form.serviceType} onChange={handleChange} className="border p-2 rounded">
-          <option value="">Select Service Type</option>
-          <option value="dining">Dining Services</option>
-          <option value="catering">Catering Event</option>
-        </select>
 
-        <LabelInput
-  label="Date of Request"
-  name="todayDate"
-  type="date"
-  value={form.todayDate}
-  onChange={handleChange}
-/>
-
-        <LabelInput
-  label="Anticipated Event Date"
-  name="eventDate"
-  type="date"
-  value={form.eventDate}
-  onChange={handleChange}
-/>
-        <LabelInput
-  label="Event Time"
-  name="eventTime"
-  type="time"
-  value={form.eventTime}
-  onChange={handleChange}
-/>
-
-       {/* Only show for Catering */}
-{isCatering && (
-  <LabelInput
-    label="External Organization / Company Name"
-    name="externalOrg"
-    value={form.externalOrg}
+        
+<div>
+  <label
+    htmlFor="serviceType"
+    className="block font-bold mb-1 text-blue-700 uppercase tracking-wide"
+  >
+    Select Service Type
+  </label>
+  <select
+    id="serviceType"
+    name="serviceType"
+    value={form.serviceType}
     onChange={handleChange}
-    placeholder="Organization Name"
-/>
-)}
-
-
-         {isCatering && (
-  <>
-    <LabelInput
-      label="Proposal Number"
-      name="proposalNumber"
-      value={form.proposalNumber}
-      onChange={handleChange}
-      placeholder="Enter Proposal Number"
-    />
-
-    <LabelInput
-      label="Room(s) # Requested"
-      name="roomCount"
-      value={form.roomCount}
-      onChange={handleChange}
-      placeholder="Number of Rooms Requested"
-    />
-
-    <LabelInput
-      label="Sales Contract Representative"
-      name="salesRep"
-      value={form.salesRep}
-      onChange={handleChange}
-      placeholder="Sales Representative Name"
-    />
-
-    <LabelInput
-      label="Event Point of Contact (CNU)"
-      name="eventPocName"
-      value={form.eventPocName}
-      onChange={handleChange}
-      placeholder="Auxiliary Services Contact Name"
-    />
-
-    <LabelInput
-      label="Point of Contact Email (CNU)"
-      name="eventPocEmail"
-      type="email"
-      value={form.eventPocEmail}
-      onChange={handleChange}
-      placeholder="Contact Email Address"
-    />
-  </>
-)}
+    className="border p-2 rounded w-full focus:ring-2 focus:ring-blue-500"
+  >
+    <option value="">-- Choose One --</option>
+    <option value="dining">Dining Services</option>
+    <option value="catering">Catering Event</option>
+  </select>
+</div>
 
 
         <LabelInput
-  label="Department / Office"
-  name="department"
-  value={form.department}
-  onChange={handleChange}
-  placeholder="Department / Office"
-/>
+          label="Date of Request"
+          name="todayDate"
+          type="date"
+          value={form.todayDate}
+          onChange={handleChange}
+        />
 
         <LabelInput
-  label="CNU Account Number"
-  name="accountNumber"
-  value={form.accountNumber}
-  onChange={handleChange}
-  placeholder="CNU Account Number"
-/>
+          label="Anticipated Event Date"
+          name="eventDate"
+          type="date"
+          value={form.eventDate}
+          onChange={handleChange}
+        />
+        <LabelInput
+          label="Event Time"
+          name="eventTime"
+          type="time"
+          value={form.eventTime}
+          onChange={handleChange}
+        />
+
+        {isCatering && (
+          <LabelInput
+            label="External Organization / Company Name"
+            name="externalOrg"
+            value={form.externalOrg}
+            onChange={handleChange}
+            placeholder="Organization Name"
+          />
+        )}
+
+        {isCatering && (
+          <>
+            <LabelInput
+              label="Proposal Number"
+              name="proposalNumber"
+              value={form.proposalNumber}
+              onChange={handleChange}
+              placeholder="Enter Proposal Number"
+            />
+            <LabelInput
+              label="Room(s) # Requested"
+              name="roomCount"
+              value={form.roomCount}
+              onChange={handleChange}
+              placeholder="Number of Rooms Requested"
+            />
+            <LabelInput
+              label="Sales Contract Representative"
+              name="salesRep"
+              value={form.salesRep}
+              onChange={handleChange}
+              placeholder="Sales Representative Name"
+            />
+            <LabelInput
+              label="Event Point of Contact (CNU)"
+              name="eventPocName"
+              value={form.eventPocName}
+              onChange={handleChange}
+              placeholder="Auxiliary Services Contact Name"
+            />
+            <LabelInput
+              label="Point of Contact Email (CNU)"
+              name="eventPocEmail"
+              type="email"
+              value={form.eventPocEmail}
+              onChange={handleChange}
+              placeholder="Contact Email Address"
+            />
+          </>
+        )}
 
         <LabelInput
-  label="Requester's Full Name"
-  name="requesterName"
-  value={form.requesterName}
-  onChange={handleChange}
-  placeholder="Full Name"
-/>
+          label="Department / Office"
+          name="department"
+          value={form.department}
+          onChange={handleChange}
+          placeholder="Department / Office"
+        />
 
         <LabelInput
-  label="Requester's Email Address"
-  name="requesterEmail"
-  type="email"
-  value={form.requesterEmail}
-  onChange={handleChange}
-  placeholder="Email Address"
-/>
+          label="CNU Account Number"
+          name="accountNumber"
+          value={form.accountNumber}
+          onChange={handleChange}
+          placeholder="CNU Account Number"
+        />
 
         <LabelInput
-  label="Requester's Phone / Extension"
-  name="requesterPhone"
-  value={form.requesterPhone}
-  onChange={handleChange}
-  placeholder="Phone Extension or Contact Number"
-/>
+          label="Requester's Full Name"
+          name="requesterName"
+          value={form.requesterName}
+          onChange={handleChange}
+          placeholder="Full Name"
+        />
 
         <LabelInput
-  label="Guaranteed Guest Count"
-  name="guestCount"
-  type="number"
-  value={form.guestCount}
-  onChange={handleChange}
-  placeholder="Guest Count"
-/>
+          label="Requester's Email Address"
+          name="requesterEmail"
+          type="email"
+          value={form.requesterEmail}
+          onChange={handleChange}
+          placeholder="Email Address"
+        />
 
-                 
-            {isCatering && (
-  <div className="md:col-span-2 border-t pt-4">
-    <label className="block font-semibold mb-1">Required Document Upload</label>
-    <p className="text-sm text-gray-600 mb-2">
-      Upload any required documents (e.g., W-9, Certificate of Insurance, Tax Exemption Form).
-    </p>
-    <input
-      type="file"
-      name="documentUpload"
-      accept=".pdf,.doc,.docx,.jpg,.png"
-      onChange={(e) => {
-        const file = e.target.files[0];
-        setForm({ ...form, documentUpload: file });
-      }}
-      className="border p-2 rounded w-full"
-    />
-  </div>
-)}
+        <LabelInput
+          label="Requester's Phone / Extension"
+          name="requesterPhone"
+          value={form.requesterPhone}
+          onChange={handleChange}
+          placeholder="Phone Extension or Contact Number"
+        />
 
+        <LabelInput
+          label="Guaranteed Guest Count"
+          name="guestCount"
+          type="number"
+          value={form.guestCount}
+          onChange={handleChange}
+          placeholder="Guest Count"
+        />
 
+        {isCatering && (
+          <div className="md:col-span-2 border-t pt-4">
+            <label className="block font-semibold mb-1">Required Document Upload</label>
+            <p className="text-sm text-gray-600 mb-2">
+              Upload any required documents (e.g., W-9, Certificate of Insurance, Tax Exemption Form).
+            </p>
+            <input
+              type="file"
+              name="documentUpload"
+              accept=".pdf,.doc,.docx,.jpg,.png"
+              onChange={handleChange}
+              className="border p-2 rounded w-full"
+            />
+          </div>
+        )}
 
         <div className="md:col-span-2 border-t pt-4">
           <label className="block font-semibold mb-1">Venue Setup</label>
-          <select name="venue" value={form.venue} onChange={handleChange} className="border p-2 rounded w-full">
+          <select
+            name="venue"
+            value={form.venue}
+            onChange={handleChange}
+            className="border p-2 rounded w-full"
+          >
             <option value="">-- Select Venue --</option>
             {(isCatering ? cateringVenues : diningVenues).map((venue) => (
               <option key={venue} value={venue}>{venue}</option>
@@ -307,8 +386,13 @@ const LabelInput = ({ label, name, type = "text", value, onChange, placeholder }
 
         <div className="md:col-span-2 border-t pt-4">
           <label className="block font-semibold mb-1">{isCatering ? 'Event Type' : 'Meal Type'}</label>
-          <select name={isCatering ? 'eventType' : 'mealType'} value={isCatering ? form.eventType : form.mealType} onChange={handleChange} className="border p-2 rounded w-full">
-            <option value="">-- Select {isCatering ? 'Event Type' : 'Meal Type'} --</option>
+          <select
+            name={isCatering ? 'eventType' : 'mealType'}
+            value={isCatering ? form.eventType : form.mealType}
+            onChange={handleChange}
+            className="border p-2 rounded w-full"
+          >
+            <option value="">{`-- Select ${isCatering ? 'Event Type' : 'Meal Type'} --`}</option>
             {isCatering ? (
               <>
                 <option>Wedding</option>
@@ -363,18 +447,37 @@ const LabelInput = ({ label, name, type = "text", value, onChange, placeholder }
           <>
             <div>
               <label className="block font-semibold mb-1">Unit Price ($)</label>
-              <input type="text" name="unitPrice" value={form.unitPrice} readOnly className="border bg-gray-100 p-2 rounded w-full" />
+              <input
+                type="text"
+                name="unitPrice_display"
+                value={unitPrice}
+                readOnly
+                className="border bg-gray-100 p-2 rounded w-full"
+              />
             </div>
             <div>
               <label className="block font-semibold mb-1">Total Cost ($)</label>
-              <input type="text" name="totalCost" value={form.totalCost} readOnly className="border bg-gray-100 p-2 rounded w-full" />
+              <input
+                type="text"
+                name="totalCost_display"
+                value={totalCost}
+                readOnly
+                className="border bg-gray-100 p-2 rounded w-full"
+              />
             </div>
           </>
         )}
 
         <div className="md:col-span-2">
           <label className="block font-semibold mb-1">Memo / Attendees Info</label>
-          <textarea name="memo" value={form.memo} onChange={handleChange} placeholder="Add notes about attendees, setup details, or other instructions" rows={4} className="border p-2 rounded w-full" />
+          <textarea
+            name="memo"
+            value={form.memo}
+            onChange={handleChange}
+            placeholder="Add notes about attendees, setup details, or other instructions"
+            rows={4}
+            className="border p-2 rounded w-full"
+          />
         </div>
 
         {isCatering && (

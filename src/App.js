@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom';
+import TempLaborPage from './TempLaborPage';
 import RegattasForm from './RegattasForm';
 import Invoices from './Invoices';
 import Dashboard from './Dashboard';
@@ -105,6 +106,7 @@ function AppContent() {
               <li><Link to="/invoices" className="block bg-blue-800 text-white px-3 py-2 rounded hover:bg-blue-700">Invoices</Link></li>
               <li><Link to="/group-entry" className="block bg-blue-800 text-white px-3 py-2 rounded hover:bg-blue-700">Group Entry</Link></li>
               <li><Link to="/inventory-dashboard" className="block bg-blue-800 text-white px-3 py-2 rounded hover:bg-blue-700">Inventory</Link></li>
+              <li><Link to="/temp-labor" className="block bg-blue-800 text-white px-3 py-2 rounded hover:bg-blue-700">Temp Labor</Link></li>
             </ul>
           </nav>
 
@@ -192,6 +194,7 @@ function AppContent() {
             <Route path="/login" element={<Login />} />
             <Route path="/inventory/add" element={<InventoryForm />} />
             <Route path="/inventory-table" element={<InventoryTable />} />
+            <Route path="/temp-labor" element={<TempLaborPage />} />
             <Route
   path="/inventory-dashboard"
   element={
