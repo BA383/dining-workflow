@@ -24,7 +24,12 @@ function TempLaborPage() {
   const [units, setUnits] = useState([]);       // [{id, name, ...}]
   const [agencies, setAgencies] = useState([]); // [{id, name, code, ...}]
   const [entries, setEntries] = useState([]);
-const [refreshTick, setRefreshTick] = useState(0);
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  const [editingId, setEditingId] = useState(null);   // id of row being edited
+  const [editDraft, setEditDraft] = useState({});     // working copy of that row
+  const [rowBusy, setRowBusy] = useState(null);       // id currently saving/deleting
+
 
   const [filters, setFilters] = useState({
   unit_id: '',
@@ -85,6 +90,78 @@ const endExclusiveIso = (dateStr) => {
   return d.toISOString(); // start of next day UTC
 };
 const startIso = (dateStr) => new Date(dateStr).toISOString();
+
+
+const startEdit = (row) => {
+  setMessage(null);
+  setEditingId(row.id);
+  setEditDraft({
+    id: row.id,
+    worker_name: row.worker_name || '',
+    date_worked: row.date_worked || '',
+    hours_worked: String(row.hours_worked ?? ''),
+    hourly_rate: row.hourly_rate == null ? '' : String(row.hourly_rate),
+    status: row.status || 'Logged',
+  });
+};
+
+const cancelEdit = () => {
+  setEditingId(null);
+  setEditDraft({});
+};
+
+const saveEdit = async () => {
+  if (!editingId) return;
+  setRowBusy(editingId);
+  try {
+    const payload = {
+      worker_name: editDraft.worker_name.trim(),
+      date_worked: editDraft.date_worked,
+      hours_worked: Number(editDraft.hours_worked || 0),
+      hourly_rate: editDraft.hourly_rate === '' ? null : Number(editDraft.hourly_rate),
+      status: editDraft.status,
+    };
+    const { error } = await supabase
+      .from('temp_time_entries')
+      .update(payload)
+      .eq('id', editingId);
+
+    if (error) {
+      setMessage({ type: 'error', text: `Update failed: ${error.message}` });
+      return;
+    }
+    setMessage({ type: 'success', text: 'Row updated.' });
+    setEditingId(null);
+    setEditDraft({});
+    // refresh table (use either your refreshTick or fetchEntries)
+    if (typeof setRefreshTick === 'function') setRefreshTick(t => t + 1);
+    // or: await fetchEntries();
+  } finally {
+    setRowBusy(null);
+  }
+};
+
+const deleteRow = async (id) => {
+  if (!window.confirm('Delete this entry? This cannot be undone.')) return;
+  setRowBusy(id);
+  try {
+    const { error } = await supabase
+      .from('temp_time_entries')
+      .delete()
+      .eq('id', id);
+    if (error) {
+      setMessage({ type: 'error', text: `Delete failed: ${error.message}` });
+      return;
+    }
+    setMessage({ type: 'success', text: 'Row deleted.' });
+    if (typeof setRefreshTick === 'function') setRefreshTick(t => t + 1);
+    // or: await fetchEntries();
+  } finally {
+    setRowBusy(null);
+  }
+};
+
+
 
 
 // Helpers: turn "code:EE" / "name:Express Employment" into real UUIDs
@@ -165,6 +242,26 @@ const ensureAgencyId = async (raw, agencies) => {
   }
 };
 
+const dayOfWeek = (dateStr, style = 'short') => {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, (m || 1) - 1, d || 1);
+  return dt.toLocaleDateString(undefined, { weekday: style }); // 'Mon' or 'Monday'
+};
+
+const clearQuickAdd = () => {
+  setMessage(null);
+  setForm({
+    unit_id: '',
+    agency_id: '',
+    worker_name: '',
+    date_worked: '',
+    hours_worked: '',
+    hourly_rate: '',
+    notes: '',
+  });
+};
+
 
 // Keep this helper too (above openPrintReport)
 const escapeHtml = (s) => {
@@ -197,9 +294,9 @@ const buildReportHtml = () => {
       <tr>
         <td>${escapeHtml(unitName)}</td>
         <td>${escapeHtml(agencyName)}</td>
-        <td>${escapeHtml(e.worker_name || '')}</td>
-        <td>${escapeHtml(e.role_title || '')}</td>
+        <td>${escapeHtml(e.worker_name || '')}</td>        
         <td>${escapeHtml(e.date_worked || '')}</td>
+        <td>${escapeHtml(dayOfWeek(e.date_worked) || '')}</td>
         <td style="text-align:right;">${hours}</td>
         <td style="text-align:right;">${rate}</td>
         <td>${escapeHtml(e.status || '')}</td>
@@ -251,11 +348,17 @@ const buildReportHtml = () => {
 
   <table>
     <thead>
-      <tr>
-        <th>Unit</th><th>Agency</th><th>Worker</th><th>Role</th>
-        <th>Date</th><th style="text-align:right;">Hours</th><th style="text-align:right;">Rate</th><th>Status</th>
-      </tr>
-    </thead>
+  <tr>
+    <th>Unit</th>
+    <th>Agency</th>
+    <th>Worker</th>
+    <th>Date</th>
+    <th>Day</th>
+    <th style="text-align:right;">Hours</th>
+    <th style="text-align:right;">Rate</th>
+    <th>Status</th>
+  </tr>
+</thead>
     <tbody>${rowsHtml || '<tr><td colspan="8" style="padding:16px;color:#64748b;">No rows for current filters.</td></tr>'}</tbody>
   </table>
 </body>
@@ -305,9 +408,6 @@ const openPrintReport = () => {
     console.error('openPrintReport failed:', err);
   }
 };
-
-
-
 
 
 
@@ -538,14 +638,61 @@ const onQuickAdd = async () => {
     });
   };
 
-  const mapCsvRow = (row) => ({
-    worker_name: row.WorkerName || row.Employee || row.Name || '',
-    role_title: row.Role || row.Title || '',
-    date_worked: (row.Date || row.WorkDate || '').slice(0, 10),
-    hours_worked: parseFloat(row.Hours || row.TotalHours || row.Duration || '0'),
-    hourly_rate: row.Rate ? parseFloat(row.Rate) : null,
-    notes: row.Notes || '',
-  });
+// --- Add these helpers ABOVE mapCsvRow ---
+const getVal = (row, candidates) => {
+  const map = {};
+  for (const k in row) map[k.trim().toLowerCase()] = row[k];
+  for (const c of candidates) {
+    const v = map[c.trim().toLowerCase()];
+    if (v != null && v !== '') return v;
+  }
+  return '';
+};
+
+// "3:30" -> 3.5, "3.5" -> 3.5
+const parseHours = (v) => {
+  if (v == null) return 0;
+  const s = String(v).trim();
+  const hhmm = /^(\d+):(\d{1,2})(?::\d{1,2})?$/.exec(s);
+  if (hhmm) {
+    const h = Number(hhmm[1] || 0);
+    const m = Number(hhmm[2] || 0);
+    return h + m / 60;
+  }
+  const f = parseFloat(s.replace(',', '.'));
+  return Number.isFinite(f) ? f : 0;
+};
+
+// Normalize many formats -> "YYYY-MM-DD"
+const normalizeDate = (v) => {
+  if (!v) return '';
+  const s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10); // already ISO-like
+  const md = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/.exec(s); // MM/DD/YYYY
+  if (md) {
+    const mm = md[1].padStart(2, '0');
+    const dd = md[2].padStart(2, '0');
+    const yyyy = md[3];
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+};
+
+// --- Replace ONLY mapCsvRow with this (note: no role_title) ---
+const mapCsvRow = (row) => ({
+  worker_name:  getVal(row, ['WorkerName', 'Employee', 'Employee Name', 'Name']),
+  date_worked:  normalizeDate(getVal(row, ['Date Worked', 'Date', 'WorkDate', 'Work Date', 'Shift Date', 'Start Date'])),
+  hours_worked: parseHours(getVal(row, ['Hours', 'TotalHours', 'Duration', 'Time Worked', 'Total Time', 'Regular Hours', 'Total Hours'])),
+  hourly_rate: (() => {
+    const v = getVal(row, ['Rate', 'Hourly Rate', 'Pay Rate', 'Hourly Pay Rate']);
+    if (v === '') return null;
+    const f = parseFloat(String(v).replace(',', '.'));
+    return Number.isFinite(f) ? f : null;
+  })(),
+  notes:       getVal(row, ['Notes', 'Note', 'Comments', 'Comment']),
+});
+
 
   const importPreviewRows = useMemo(() => csvPreview.map(mapCsvRow), [csvPreview]);
 
@@ -571,9 +718,9 @@ const onQuickAdd = async () => {
     const rows = entries.map((e) => ({
       Unit: units.find((u) => u.id === e.unit_id)?.name || '',
       Agency: agencies.find((a) => a.id === e.agency_id)?.name || '',
-      Worker: e.worker_name,
-      Role: e.role_title || '',
+      Worker: e.worker_name,      
       Date: e.date_worked,
+      Day: dayOfWeek(e.date_worked, 'long'), // e.g., "Monday"
       Hours: e.hours_worked,
       Rate: e.hourly_rate ?? '',
       Notes: e.notes ?? '',
@@ -818,6 +965,15 @@ const onQuickAdd = async () => {
               {submitting ? 'Adding…' : 'Add'}
             </button>
 
+<button
+  type="button"
+  onClick={clearQuickAdd}
+  className="border rounded px-3 py-2 md:col-span-1 bg-white hover:bg-gray-50"
+>
+  Clear
+</button>
+
+
             {message && (
               <div
                 className={`md:col-span-3 text-sm ${
@@ -891,8 +1047,8 @@ const onQuickAdd = async () => {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="p-2 text-left">Worker</th>
-                      <th className="p-2 text-left">Role</th>
                       <th className="p-2 text-left">Date</th>
+                      <th className="p-2 text-left">Day</th>
                       <th className="p-2 text-right">Hours</th>
                       <th className="p-2 text-right">Rate</th>
                       <th className="p-2 text-left">Notes</th>
@@ -901,9 +1057,9 @@ const onQuickAdd = async () => {
                   <tbody>
                     {importPreviewRows.map((r, i) => (
                       <tr key={i} className="border-t">
-                        <td className="p-2">{r.worker_name}</td>
-                        <td className="p-2">{r.role_title}</td>
+                        <td className="p-2">{r.worker_name}</td>                     
                         <td className="p-2">{r.date_worked}</td>
+                        <td className="p-2">{dayOfWeek(r.date_worked)}</td>
                         <td className="p-2 text-right">{r.hours_worked}</td>
                         <td className="p-2 text-right">{r.hourly_rate ?? ''}</td>
                         <td className="p-2">{r.notes}</td>
@@ -981,26 +1137,126 @@ const onQuickAdd = async () => {
                 <tr>
                   <th className="p-2 text-left">Unit</th>
                   <th className="p-2 text-left">Agency</th>
-                  <th className="p-2 text-left">Worker</th>
-                  <th className="p-2 text-left">Role</th>
+                  <th className="p-2 text-left">Worker</th>                  
                   <th className="p-2 text-left">Date</th>
+                  <th className="p-2 text-left">Day</th>
                   <th className="p-2 text-right">Hours</th>
                   <th className="p-2 text-right">Rate</th>
                   <th className="p-2 text-left">Status</th>
+                  <th className="p-2 text-left">Actions</th> {/* NEW */}
                 </tr>
               </thead>
               <tbody>
                 {entries.map((e) => (
-                  <tr key={e.id} className="border-t">
-                    <td className="p-2">{units.find((u) => u.id === e.unit_id)?.name || ''}</td>
-                    <td className="p-2">{agencies.find((a) => a.id === e.agency_id)?.name || ''}</td>
-                    <td className="p-2">{e.worker_name}</td>
-                    <td className="p-2">{e.role_title || ''}</td>
-                    <td className="p-2">{e.date_worked}</td>
-                    <td className="p-2 text-right">{e.hours_worked}</td>
-                    <td className="p-2 text-right">{e.hourly_rate ?? ''}</td>
-                    <td className="p-2">{e.status}</td>
-                  </tr>
+                 <tr key={e.id} className="border-t">
+  <td className="p-2">{units.find(u => u.id === e.unit_id)?.name || ''}</td>
+  <td className="p-2">{agencies.find(a => a.id === e.agency_id)?.name || ''}</td>
+
+  {/* Worker */}
+  <td className="p-2">
+    {editingId === e.id ? (
+      <input
+        className="border p-1 rounded w-full"
+        value={editDraft.worker_name}
+        onChange={(ev) => setEditDraft(d => ({ ...d, worker_name: ev.target.value }))}
+      />
+    ) : e.worker_name}
+  </td>
+
+  {/* Date */}
+  <td className="p-2">
+    {editingId === e.id ? (
+      <input
+        type="date"
+        className="border p-1 rounded w-full"
+        value={editDraft.date_worked}
+        onChange={(ev) => setEditDraft(d => ({ ...d, date_worked: ev.target.value }))}
+      />
+    ) : e.date_worked}
+  </td>
+
+  {/* Day (read-only) */}
+  <td className="p-2">{dayOfWeek(editingId === e.id ? editDraft.date_worked : e.date_worked)}</td>
+
+  {/* Hours */}
+  <td className="p-2 text-right">
+    {editingId === e.id ? (
+      <input
+        type="number"
+        step="0.01"
+        className="border p-1 rounded w-full text-right"
+        value={editDraft.hours_worked}
+        onChange={(ev) => setEditDraft(d => ({ ...d, hours_worked: ev.target.value }))}
+      />
+    ) : e.hours_worked}
+  </td>
+
+  {/* Rate */}
+  <td className="p-2 text-right">
+    {editingId === e.id ? (
+      <input
+        type="number"
+        step="0.01"
+        className="border p-1 rounded w-full text-right"
+        value={editDraft.hourly_rate}
+        onChange={(ev) => setEditDraft(d => ({ ...d, hourly_rate: ev.target.value }))}
+      />
+    ) : (e.hourly_rate ?? '')}
+  </td>
+
+  {/* Status */}
+  <td className="p-2">
+    {editingId === e.id ? (
+      <select
+        className="border p-1 rounded"
+        value={editDraft.status}
+        onChange={(ev) => setEditDraft(d => ({ ...d, status: ev.target.value }))}
+      >
+        {['Logged','Exported','Invoiced'].map(s => (
+          <option key={s} value={s}>{s}</option>
+        ))}
+      </select>
+    ) : e.status}
+  </td>
+
+  {/* Actions */}
+  <td className="p-2">
+    {editingId === e.id ? (
+      <div className="flex gap-2">
+        <button
+          onClick={saveEdit}
+          disabled={rowBusy === e.id}
+          className="px-2 py-1 rounded bg-blue-600 text-white disabled:opacity-50"
+        >
+          Save
+        </button>
+        <button
+          onClick={cancelEdit}
+          className="px-2 py-1 rounded border bg-white hover:bg-gray-50"
+        >
+          Cancel
+        </button>
+      </div>
+    ) : (
+      <div className="flex gap-2">
+        <button
+          onClick={() => startEdit(e)}
+          className="px-2 py-1 rounded border bg-white hover:bg-gray-50"
+        >
+          Edit
+        </button>
+        <button
+          onClick={() => deleteRow(e.id)}
+          disabled={rowBusy === e.id}
+          className="px-2 py-1 rounded border bg-white hover:bg-gray-50 text-red-700"
+        >
+          Delete
+        </button>
+      </div>
+    )}
+  </td>
+</tr>
+
                 ))}
               </tbody>
             </table>
