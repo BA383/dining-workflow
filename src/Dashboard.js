@@ -10,7 +10,7 @@ import { logVisit } from './utils/logVisit'; // Adjust the path if needed
 
 
 function Dashboard() {
-  const [invoicePending, setInvoicePending] = useState(0);
+const [invoicePending, setInvoicePending] = useState(0);
 const [eomStatus, setEomStatus] = useState('');
 const [pendingDeposits, setPendingDeposits] = useState(0);
 
@@ -18,6 +18,12 @@ const [completedCount, setCompletedCount] = useState(0);
 const [pendingCount, setPendingCount] = useState(0);
 const [docuSignCount, setDocuSignCount] = useState(0);
 const [recentActivity, setRecentActivity] = useState([]);
+const [invoiceCompletedCount, setInvoiceCompletedCount] = useState(0);
+const [depositCompletedCount, setDepositCompletedCount] = useState(0);
+const [timesheetCompletedCount, setTimesheetCompletedCount] = useState(0);
+const [groupEntryCount, setGroupEntryCount] = useState(0);
+const [eomRunCount, setEomRunCount] = useState(0);
+
 
 
   // ✅ First useEffect for visit tracking
@@ -49,21 +55,32 @@ useEffect(() => {
       setInvoicePending(invoices.length);
     }
 
-    // ✅ EOM Inventory Status
-    const { data: eomData } = await supabase
-      .from('eom_inventory')
-      .select('run_date')
-      .gte('run_date', today.startOf('month').format('YYYY-MM-DD'));
+    // ✅ EOM Inventory Status (count-based, no eomData var)
+const monthStart = today.startOf('month').format('YYYY-MM-DD');
+const monthEnd   = today.endOf('month').format('YYYY-MM-DD');
 
-    if (!eomData || eomData.length === 0) {
-      const todayDate = today.format('YYYY-MM-DD');
-      if (todayDate === endOfMonth) {
-        setEomStatus('⚠️ EOM due today');
-      } else if (dayjs(todayDate).isAfter(endOfMonth)) {
-        const overdueDays = dayjs().diff(endOfMonth, 'day');
-        setEomStatus(`❗ EOM overdue by ${overdueDays} day${overdueDays > 1 ? 's' : ''}`);
-      }
-    }
+// count how many EOM runs exist this month
+const { count: eomCount } = await supabase
+  .from('eom_inventory')
+  .select('id', { count: 'exact', head: true })
+  .gte('run_date', monthStart)
+  .lte('run_date', monthEnd);
+
+// set status only if none have been run yet
+if ((eomCount ?? 0) === 0) {
+  const todayDate = today.format('YYYY-MM-DD');
+  if (todayDate === monthEnd) {
+    setEomStatus('⚠️ EOM due today');
+  } else if (dayjs(todayDate).isAfter(monthEnd)) {
+    const overdueDays = dayjs().diff(monthEnd, 'day');
+    setEomStatus(`❗ EOM overdue by ${overdueDays} day${overdueDays > 1 ? 's' : ''}`);
+  } else {
+    setEomStatus('');
+  }
+} else {
+  setEomStatus(''); // already run this month
+}
+
 
     // ✅ Pending Deposit Signatures
     const { data: depositData } = await supabase
@@ -82,85 +99,84 @@ useEffect(() => {
 
 useEffect(() => {
   const loadDashboardStats = async () => {
-    // ✅ Completed Submissions (invoices + deposits marked completed)
-    const { data: completedInvoices } = await supabase
-      .from('invoices')
-      .select('id')
-      .eq('status', 'completed');
+    // Optional: count EOM runs for current month (swap to all-time if you prefer)
+    const monthStart = dayjs().startOf('month').format('YYYY-MM-DD');
+    const monthEnd   = dayjs().endOf('month').format('YYYY-MM-DD');
 
-    const { data: completedDeposits } = await supabase
-      .from('deposits')
-      .select('id')
-      .eq('status', 'completed');
+    const [
+      invCompleted, depCompleted, tsCompleted, grpAll, eomThisMonth,
+      invPending, depPending, invSent, depSent
+    ] = await Promise.all([
+      supabase.from('invoices')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'completed'),
 
-    setCompletedCount(
-      (completedInvoices?.length || 0) + (completedDeposits?.length || 0)
-    );
+      supabase.from('deposits')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'completed'),
 
-    // ✅ Pending Approvals (invoices or deposits awaiting approval)
-    const { data: pendingInvoices } = await supabase
-      .from('invoices')
-      .select('id')
-      .eq('status', 'awaiting_approval');
+      // Treat temp labor rows as "completed" once Exported or Invoiced
+      supabase.from('temp_time_entries')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['Exported', 'Invoiced']),
 
-    const { data: pendingDeposits } = await supabase
-      .from('deposits')
-      .select('id')
-      .eq('status', 'awaiting_approval');
+      // Group entries: total submitted (adjust filter if you only want this month/week)
+      supabase.from('group_entries')
+        .select('id', { count: 'exact', head: true }),
 
-    setPendingCount(
-      (pendingInvoices?.length || 0) + (pendingDeposits?.length || 0)
-    );
+      // EOM runs this month
+      supabase.from('eom_inventory')
+        .select('id', { count: 'exact', head: true })
+        .gte('run_date', monthStart)
+        .lte('run_date', monthEnd),
 
-    // ✅ Sent to DocuSign (any item where sent = true)
-    const { data: sentInvoices } = await supabase
-      .from('invoices')
-      .select('id')
-      .eq('sent_to_docusign', true);
+      // --- These fuel the yellow/blue tiles (keep even if 0 for now) ---
+      supabase.from('invoices')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'awaiting_approval'),
 
-    const { data: sentDeposits } = await supabase
-      .from('deposits')
-      .select('id')
-      .eq('sent_to_docusign', true);
+      supabase.from('deposits')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'awaiting_approval'),
 
-    setDocuSignCount(
-      (sentInvoices?.length || 0) + (sentDeposits?.length || 0)
-    );
+      supabase.from('invoices')
+        .select('id', { count: 'exact', head: true })
+        .eq('sent_to_docusign', true),
 
-    // ✅ Recent Activity (combine 5 latest invoices + deposits)
-    const { data: recentInvoices } = await supabase
-      .from('invoices')
-      .select('id, created_at, status')
-      .order('created_at', { ascending: false })
-      .limit(3);
+      supabase.from('deposits')
+        .select('id', { count: 'exact', head: true })
+        .eq('sent_to_docusign', true),
+    ]);
 
-    const { data: recentDeposits } = await supabase
-      .from('deposits')
-      .select('unit, created_at, status')
-      .order('created_at', { ascending: false })
-      .limit(2);
+    const invC = invCompleted.count ?? 0;
+    const depC = depCompleted.count ?? 0;
+    const tsC  = tsCompleted.count ?? 0;
+    const grpC = grpAll.count ?? 0;
+    const eomC = eomThisMonth.count ?? 0;
 
-    const activity = [];
+    setInvoiceCompletedCount(invC);
+    setDepositCompletedCount(depC);
+    setTimesheetCompletedCount(tsC);
+    setGroupEntryCount(grpC);
+    setEomRunCount(eomC);
+    setCompletedCount(invC + depC + tsC + grpC + eomC);
 
-    recentInvoices?.forEach((i) =>
-      activity.push({
-        text: `Invoice #${i.id} ${i.status?.replace('_', ' ')}`,
-        date: dayjs(i.created_at).format('MMM D'),
-      })
-    );
-
-    recentDeposits?.forEach((d) =>
-      activity.push({
-        text: `Deposit for ${d.unit} ${d.status?.replace('_', ' ')}`,
-        date: dayjs(d.created_at).format('MMM D'),
-      })
-    );
-
-    setRecentActivity(activity.slice(0, 5)); // Combine and cap to 5
+    // Yellow & Blue tiles (safe to keep at 0 until you formalize logic)
+    const pending = (invPending.count ?? 0) + (depPending.count ?? 0);
+    const sentDS  = (invSent.count ?? 0) + (depSent.count ?? 0);
+    setPendingCount(pending);
+    setDocuSignCount(sentDS);
   };
 
   loadDashboardStats();
 }, []);
+
+
+
+
+
+const hasTaskAlerts =
+  (invoicePending > 0) || (pendingDeposits > 0) || Boolean(eomStatus);
 
 
   // ✅ Permissions check
@@ -194,25 +210,84 @@ useEffect(() => {
           <h2 className="text-lg font-semibold text-blue-800 mb-2">📊 Director's Snapshot</h2>
           <p className="text-sm text-gray-600">Insights and tracking.</p>
         </Link>
-       <Link to="/tasks" className="bg-white p-4 border rounded shadow hover:shadow-md transition">
-  <h2 className="text-lg font-semibold text-blue-800 mb-2">📝 New Task Alert</h2>
-  <p className="text-sm text-gray-600">
-    Initiate required workflow tasks.<br />
-    {invoicePending > 0 && (
-      <span className="text-red-600 font-semibold block">
-        {invoicePending} invoice{invoicePending > 1 ? 's' : ''} awaiting signature
+
+
+
+<Link
+  to="/tasks"
+  aria-label="Open task center"
+  className={[
+    "relative overflow-hidden rounded-xl p-5 transition",
+    "md:col-span-2", // makes it wider than other tiles
+    hasTaskAlerts
+      ? "bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50 ring-1 ring-amber-300 shadow-lg hover:shadow-xl"
+      : "bg-slate-50 ring-1 ring-slate-200 shadow hover:shadow-md"
+  ].join(" ")}
+>
+  {/* left accent bar */}
+  <span className="absolute inset-y-0 left-0 w-1 bg-amber-500" aria-hidden />
+
+  {/* soft glow blob */}
+  <span
+    className="pointer-events-none absolute -top-16 -right-16 h-40 w-40 rounded-full bg-amber-200/50 blur-3xl"
+    aria-hidden
+  />
+
+  <div className="relative z-10">
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex items-center gap-3">
+        <div className={`h-10 w-10 shrink-0 grid place-items-center rounded-full 
+          ${hasTaskAlerts ? "bg-amber-100 text-amber-800" : "bg-slate-200 text-slate-700"}`}>
+          🛎️
+        </div>
+        <div>
+          <h2 className="text-xl font-semibold text-blue-900">New Task Alert</h2>
+          <p className="text-sm text-slate-700">
+            Initiate required workflow tasks and see what needs attention.
+          </p>
+        </div>
+      </div>
+
+      {/* CTA button */}
+      <span className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium
+        ${hasTaskAlerts ? "bg-amber-600 text-white" : "bg-blue-600 text-white"}`}>
+        Open Tasks <span aria-hidden>→</span>
       </span>
-    )}
-    {pendingDeposits > 0 && (
-      <span className="text-yellow-700 font-semibold block">
-        {pendingDeposits} deposit{pendingDeposits > 1 ? 's' : ''} need signature
-      </span>
-    )}
-    {eomStatus && (
-      <span className="text-orange-700 font-semibold block">{eomStatus}</span>
-    )}
-  </p>
+    </div>
+
+    {/* alert pills */}
+    <div className="mt-3 flex flex-wrap gap-2 text-xs">
+      {invoicePending > 0 && (
+        <span className="rounded-full bg-red-100 text-red-800 px-3 py-1">
+          {invoicePending} invoice{invoicePending > 1 ? "s" : ""} awaiting signature
+        </span>
+      )}
+      {pendingDeposits > 0 && (
+        <span className="rounded-full bg-yellow-100 text-yellow-800 px-3 py-1">
+          {pendingDeposits} deposit{pendingDeposits > 1 ? "s" : ""} need signature
+        </span>
+      )}
+      {eomStatus && (
+        <span className="rounded-full bg-orange-100 text-orange-800 px-3 py-1">
+          {eomStatus}
+        </span>
+      )}
+      {!hasTaskAlerts && (
+        <span className="rounded-full bg-emerald-100 text-emerald-800 px-3 py-1">
+          All clear for now ✅
+        </span>
+      )}
+    </div>
+  </div>
 </Link>
+
+
+
+  {/* ✅ New: Temp Labor Timesheets tile */}
+  <Link to="/temp-labor" className="bg-white p-4 border rounded shadow hover:shadow-md transition">
+    <h2 className="text-lg font-semibold text-blue-800 mb-2">🧾 Temp Labor Timesheets</h2>
+    <p className="text-sm text-gray-600">Log hours, import CSV, review & export.</p>
+  </Link>
 
 
         <Link to="/inventory-dashboard" className="bg-white p-4 border rounded shadow hover:shadow-md transition">
@@ -223,19 +298,34 @@ useEffect(() => {
 
       {/* Status Boxes */}
 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-  <div className="bg-green-100 text-green-800 p-4 rounded shadow">
+  {/* Completed */}
+  <div className="bg-green-100 text-green-900 p-4 rounded shadow">
     <h3 className="text-lg font-semibold">✅ Completed Submissions</h3>
-    <p className="text-2xl font-bold">{completedCount}</p>
+    <p className="text-3xl font-bold">{completedCount}</p>
+    <div className="text-xs mt-2 space-y-1">
+      <div>Invoices: <b>{invoiceCompletedCount}</b></div>
+      <div>Deposits: <b>{depositCompletedCount}</b></div>
+      <div>Timesheets: <b>{timesheetCompletedCount}</b></div>
+      <div>Group Entry: <b>{groupEntryCount}</b></div>
+      <div>EOM Inventory Runs (mo): <b>{eomRunCount}</b></div>
+    </div>
   </div>
+
+  {/* Pending Approvals (kept for future; shows 0 until your workflow fills it) */}
   <div className="bg-yellow-100 text-yellow-800 p-4 rounded shadow">
     <h3 className="text-lg font-semibold">🕒 Pending Approvals</h3>
-    <p className="text-2xl font-bold">{pendingCount}</p>
+    <p className="text-3xl font-bold">{pendingCount}</p>
+    <p className="text-xs mt-1">Figures will populate as approval routing is enabled.</p>
   </div>
+
+  {/* Sent to DocuSign (kept for future; shows 0 until wired) */}
   <div className="bg-blue-100 text-blue-800 p-4 rounded shadow">
     <h3 className="text-lg font-semibold">📨 Sent to DocuSign</h3>
-    <p className="text-2xl font-bold">{docuSignCount}</p>
+    <p className="text-3xl font-bold">{docuSignCount}</p>
+    <p className="text-xs mt-1">Auto-increments once envelopes are sent.</p>
   </div>
 </div>
+
 
 
       {/* Recent Activity */}

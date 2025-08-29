@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import Papa from 'papaparse';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
+
 
 // Add near the imports
 const DEFAULT_UNITS = [
@@ -261,6 +265,61 @@ const clearQuickAdd = () => {
     notes: '',
   });
 };
+
+
+const exportTablePdf = () => {
+  const doc = new jsPDF({ orientation: "landscape", unit: "pt" });
+
+  const unitLabel = filters.unit_id ? (units.find(u => u.id === filters.unit_id)?.name || "Selected Unit") : "All Units";
+  const agencyLabel = filters.agency_id ? (agencies.find(a => a.id === filters.agency_id)?.name || "Selected Agency") : "All Agencies";
+  const rangeLabel = (filters.start_date || filters.end_date)
+    ? `${filters.start_date || "…"} → ${filters.end_date || "…"}`
+    : "All Dates";
+
+  // Title + meta
+  doc.setFontSize(14);
+  doc.text("Temp Labor — Review Report", 40, 40);
+  doc.setFontSize(10);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, 40, 58);
+  doc.text(`Unit: ${unitLabel}    Agency: ${agencyLabel}    Range: ${rangeLabel}`, 40, 72);
+  doc.text(`Rows: ${entries.length}    Total Hours: ${totalHours.toFixed(2)}    Est. Cost: $${totalCost.toFixed(2)}`, 40, 86);
+
+  // Table
+  const head = [["Unit","Agency","Worker","Date","Day","Hours","Rate","Status"]];
+  const body = entries.map(e => [
+    units.find(u => u.id === e.unit_id)?.name || "",
+    agencies.find(a => a.id === e.agency_id)?.name || "",
+    e.worker_name || "",
+    e.date_worked || "",
+    dayOfWeek(e.date_worked) || "",
+    Number(e.hours_worked || 0).toFixed(2),
+    e.hourly_rate == null ? "" : Number(e.hourly_rate).toFixed(2),
+    e.status || ""
+  ]);
+
+  autoTable(doc, {
+    head,
+    body,
+    startY: 100,
+    styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak' },
+    headStyles: { fillColor: [240, 240, 240] },
+    columnStyles: {
+      5: { halign: "right" }, // Hours
+      6: { halign: "right" }  // Rate
+    },
+    didDrawPage: (data) => {
+      // Footer page number
+      const pageStr = `Page ${doc.internal.getNumberOfPages()}`;
+      doc.setFontSize(9);
+      doc.text(pageStr, data.settings.margin.left, doc.internal.pageSize.getHeight() - 10);
+    }
+  });
+
+  const agencySlug = agencyLabel.replace(/\s+/g, "_");
+  const unitSlug = unitLabel.replace(/\s+/g, "_");
+  doc.save(`TempLabor_${unitSlug}_${agencySlug}.pdf`);
+};
+
 
 
 // Keep this helper too (above openPrintReport)
@@ -755,7 +814,7 @@ const mapCsvRow = (row) => ({
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold text-blue-900 mb-4">Temp Labor</h1>
+      <h1 className="text-2xl font-bold text-blue-900 mb-4">Temp Labor Timesheets</h1>
 
       {/* Filters & Tabs */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
@@ -858,6 +917,12 @@ const mapCsvRow = (row) => ({
   Export CSV
 </button>
 
+<button
+  onClick={exportTablePdf}
+  className="px-3 py-2 rounded border bg-gray-100 hover:bg-gray-200"
+>
+  Export PDF
+</button>
 
           
         </div>
