@@ -247,7 +247,7 @@ function AppContent() {
       </div>
 
       <footer className="bg-blue-900 text-white text-center py-6">
-        One Avenue of the Arts | Newport News, VA 23606 © 2025 Christopher Newport University Dining Services
+        One Avenue of the Arts | Newport News, VA 23606 © 2025 Christopher Newport University Auxiliary Services
       </footer>
     </div>
   );
