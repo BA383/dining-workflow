@@ -193,7 +193,7 @@ const hasTaskAlerts =
   return (
     <div className="p-4 sm:p-6 md:p-8 max-w-6xl mx-auto">
       <h1 className="text-3xl font-bold mb-6 text-blue-900">
-        Dining Workflow ~ Knotted Together for Excellence
+        Dining/Auxiliary Workflow ~ Knotted Together for Excellence
       </h1>
 
       {/* Quick Actions */}

@@ -61,7 +61,7 @@ function AppContent() {
       <header className="sticky top-0 z-50 bg-white shadow px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <img src="/cnulogo.png" alt="CNU Logo" className="h-8 w-auto" />
-         <h2 className="text-base md:text-xl font-bold text-blue-900">CNU DINING</h2>
+         <h2 className="text-base md:text-xl font-bold text-blue-900">CNU AUXILIARY</h2>
 
         </div>
 
