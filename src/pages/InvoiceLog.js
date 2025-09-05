@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { CSVLink } from 'react-csv';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import BackToAdminDashboard from '../BackToAdminDashboard';
+
+
 
 
 const departmentOptions = [
@@ -21,11 +24,26 @@ export default function InvoiceLog() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
   vendor: '',
-  diningUnit: '',
+  department: '',
   status: '',
-  source: '' // ➜ NEW
+  source: ''
 });
 
+
+
+const mergedDepartmentOptions = useMemo(() => {
+  const fromRows = invoices.map(inv => inv.department).filter(Boolean);
+  const fromDining = invoices
+    .map(inv => (inv.dining_unit ? `Dining - ${inv.dining_unit}` : null))
+    .filter(Boolean);
+
+  // departmentOptions should be your static list (defined once, outside the component)
+  return Array.from(new Set([
+    ...departmentOptions,
+    ...fromRows,
+    ...fromDining,
+  ]));
+}, [invoices]);
 
 
 
@@ -117,17 +135,27 @@ const [manualForm, setManualForm] = useState({
     }
   };
 
+
+
+  
+
   const filteredInvoices = invoices.filter((inv) => {
   const matchesVendor = inv.vendor?.toLowerCase().includes(searchTerm.toLowerCase());
   const matchesInvoice = inv.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase());
 
+  const matchesDepartment =
+    !filters.department ||
+    inv.department === filters.department ||
+    (inv.dining_unit && `Dining - ${inv.dining_unit}` === filters.department);
+
   const matchesFilters =
     (!filters.vendor || inv.vendor === filters.vendor) &&
+    matchesDepartment &&
     (!filters.diningUnit || inv.dining_unit === filters.diningUnit) &&
     (!filters.status || inv.status === filters.status) &&
-    (!filters.source || inv.source === filters.source); // ✅ included here
+    (!filters.source || inv.source === filters.source);
 
-  return (matchesVendor || matchesInvoice) && matchesFilters; // ✅ returned
+  return (matchesVendor || matchesInvoice) && matchesFilters;
 });
 
 
@@ -315,6 +343,7 @@ const generatePDF = () => {
 
 return (
   <div className="p-6 max-w-7xl mx-auto">
+    <BackToAdminDashboard />
     {/* Manual Expense Modal */}
     {isManualOpen && (
       <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
@@ -421,49 +450,50 @@ return (
 
     <h1 className="text-2xl font-bold text-blue-900 mb-4">📄 Submitted Invoices</h1>
 
-    {/* FILTERS */}
-    <div className="flex flex-col md:flex-row md:flex-nowrap gap-4 mb-4">
-      <input
-        type="text"
-        placeholder="Search vendor or invoice #"
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        className="border p-2 rounded w-full md:w-1/3"
-      />
+{/* FILTERS */}
+<div className="flex flex-col md:flex-row md:flex-nowrap gap-4 mb-4">
+  <input
+    type="text"
+    placeholder="Search vendor or invoice #"
+    value={searchTerm}
+    onChange={(e) => setSearchTerm(e.target.value)}
+    className="border p-2 rounded w-full md:w-1/3"
+  />
 
-      {userRole === 'admin' && (
-        <select
-          value={filters.diningUnit}
-          onChange={(e) => setFilters({ ...filters, diningUnit: e.target.value })}
-          className="border p-2 rounded w-full md:w-1/4"
-        >
-          <option value="">All Auxiliary Units</option>
-          {[...new Set(invoices.map(inv => inv.dining_unit))].map(unit => (
-            <option key={unit} value={unit}>{unit}</option>
-          ))}
-        </select>
-      )}
+  {/* NEW: Department filter (all Auxiliary + Dining) */}
+  <select
+    value={filters.department}
+    onChange={(e) => setFilters({ ...filters, department: e.target.value })}
+    className="border p-2 rounded w-full md:w-1/4"
+  >
+    <option value="">All Departments</option>
+    {mergedDepartmentOptions.map(dep => (
+      <option key={dep} value={dep}>{dep}</option>
+    ))}
+  </select>
 
-      <select
-        value={filters.status}
-        onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-        className="border p-2 rounded w-full md:w-1/4"
-      >
-        <option value="">All Statuses</option>
-        <option value="Submitted">Submitted</option>
-        <option value="Processed">Processed</option>
-      </select>
 
-      <select
-        value={filters.source}
-        onChange={(e) => setFilters({ ...filters, source: e.target.value })}
-        className="border p-2 rounded w-full md:w-1/4"
-      >
-        <option value="">All Sources</option>
-        <option value="form">Form</option>
-        <option value="manual">Manual</option>
-      </select>
-    </div>
+  <select
+    value={filters.status}
+    onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+    className="border p-2 rounded w-full md:w-1/4"
+  >
+    <option value="">All Statuses</option>
+    <option value="Submitted">Submitted</option>
+    <option value="Processed">Processed</option>
+  </select>
+
+  <select
+    value={filters.source}
+    onChange={(e) => setFilters({ ...filters, source: e.target.value })}
+    className="border p-2 rounded w-full md:w-1/4"
+  >
+    <option value="">All Sources</option>
+    <option value="form">Pulled From Invoice</option>
+    <option value="manual">Manual Entry</option>
+  </select>
+</div>
+
 
     {/* ACTION BAR */}
     <div className="flex items-center gap-2 mb-2">
