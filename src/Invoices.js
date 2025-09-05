@@ -1,6 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import BackToAdminDashboard from './BackToAdminDashboard';
 import { supabase } from './supabaseClient';
+
+// Single source of truth for form defaults (OK to keep outside the component)
+const INITIAL_FORM = {
+  name: '',
+  email: '',
+  vendor: '',
+  invoiceDate: '',
+  date: '',                    // Date invoice was received by submitter
+  invoiceNumber: '',
+  diningUnit: '',              // legacy compatibility (auto-filled for Dining)
+  entity: '',
+  weekEnding: '',
+  invoiceTotal: '',
+  customerNumber: '',
+  orderNumber: '',
+  purchaseOrder: '',
+  memo: '',
+  submittedBy: '',
+  originalRecipient: '',
+  // NEW fields for Auxiliary
+  department: '',              // REQUIRED
+  additionalDepartment: '',
+  accountCode: '',
+  purpose: '',                 // REQUIRED
+  expenseType: '',             // REQUIRED
+  paymentMethod: '',
+};
 
 const DEPARTMENT_OPTIONS = [
   'Dining - Bistro','Dining - Regattas','Dining - Commons','Captains Card','Parking Services',
@@ -15,41 +42,26 @@ const EXPENSE_TYPES = [
   'Passthrough/Reimbursable Expense'
 ];
 
-function Invoices() {
-  const [form, setForm] = useState({
-    name: '',
-    email: '',
-    vendor: '',
-    invoiceDate: '',
-    date: '',                    // Date invoice was received by submitter
-    invoiceNumber: '',
-    diningUnit: '',              // kept for legacy compatibility (filled automatically for Dining)
-    entity: '',
-    weekEnding: '',
-    invoiceTotal: '',
-    customerNumber: '',
-    orderNumber: '',
-    purchaseOrder: '',
-    memo: '',
-    submittedBy: '',
-    originalRecipient: '',
+export default function Invoices() {
+  // ✅ All hooks go INSIDE the component
+  const fileInputRef = useRef(null);
+  const [form, setForm] = useState(INITIAL_FORM);
 
-    // NEW fields for Auxiliary
-    department: '',              // REQUIRED
-    additionalDepartment: '',
-    accountCode: '',
-    purpose: '',                 // REQUIRED
-    expenseType: '',             // REQUIRED
-    paymentMethod: '',
-  });
-
-  // Temp Agency handling (keeps your current behavior)
+  // Temp Agency handling
   const [showTempVendors, setShowTempVendors] = useState(false);
   const [tempVendor, setTempVendor] = useState('');
 
-  // Attachments
+  // Attachments + saving state
   const [files, setFiles] = useState([]); // File[]
   const [saving, setSaving] = useState(false);
+
+  const clearForm = () => {
+    setForm(INITIAL_FORM);
+    setShowTempVendors(false);
+    setTempVendor('');
+    setFiles([]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -350,7 +362,7 @@ function Invoices() {
 
           {/* Money / Coding */}
           <div>
-  <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Total *</label>
+  <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Total ($) *</label>
   <input
     type="number"
     step="0.01"
@@ -413,31 +425,61 @@ function Invoices() {
             <option value="Business Office">Other</option>
           </select>
         </div>
+{/* Memo */}
+<textarea
+  name="memo"
+  placeholder="Memo or Notes"
+  value={form.memo}
+  onChange={handleChange}
+  rows="4"
+  className="border rounded p-2 w-full"
+/>
 
-        {/* Memo */}
-        <textarea name="memo" placeholder="Memo or Notes" value={form.memo} onChange={handleChange} rows="4" className="border rounded p-2 w-full"></textarea>
+{/* Attachments (single input) */}
+<div className="mt-2">
+  <label className="block text-sm font-medium text-gray-700 mb-1">
+    Attachments (up to 5, max 100MB each)
+  </label>
+  <input
+    ref={fileInputRef}
+    type="file"
+    multiple
+    onChange={handleFileChange}
+    className="border rounded p-2 w-full"
+    // accept=".pdf,image/*"  // optional
+  />
+</div>
 
-        {/* Attachments (NEW) */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Attachments (up to 5, max 100MB each)</label>
-          <input type="file" multiple onChange={handleFileChange} className="border rounded p-2 w-full" />
-        </div>
+{/* Actions */}
+<div className="mt-6 flex flex-wrap items-center gap-3">
+  <button
+    type="submit"
+    disabled={saving}
+    className="inline-flex items-center justify-center h-10 px-4 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+  >
+    {saving ? 'Submitting…' : 'Submit Invoice'}
+  </button>
 
-        <div className="flex gap-4">
-          <button
-            type="submit"
-            disabled={saving}
-            className={`px-4 py-2 rounded text-white ${saving ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'}`}
-          >
-            {saving ? 'Submitting…' : 'Submit Invoice'}
-          </button>
-          <button type="button" onClick={handleDownload} className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700">
-            Download Copy
-          </button>
-        </div>
+  {/* Clear Fields */}
+  <button
+    type="button"
+    onClick={clearForm}
+    className="inline-flex items-center justify-center h-10 px-4 rounded border border-gray-300 bg-red-500 hover:bg-gray-50"
+  >
+    Clear All Fields
+  </button>
+
+  <button
+    type="button"
+    onClick={handleDownload}
+    className="inline-flex items-center justify-center h-10 px-4 rounded bg-gray-600 text-white hover:bg-gray-700"
+  >
+    Download Copy
+  </button>
+</div>
+
       </form>
     </div>
   );
 }
 
-export default Invoices;
