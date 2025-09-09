@@ -14,6 +14,19 @@ const departmentOptions = [
   'Dining - Concessions','Dining - Einsteins','Dining - Discovery Cafe (CFA and Grill\'d)','Summer Camps and Conferences'
 ];
 
+
+const EXPENSE_TYPES = [
+  'Ongoing',
+  'One time, expected',
+  'One time, unexpected',
+  'Passthrough/Reimbursable Expense',
+  'Monthly',
+  'Quarterly',
+  'Annual',
+];
+
+
+
 export default function InvoiceLog() {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,10 +37,12 @@ export default function InvoiceLog() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
   vendor: '',
-  department: '',
+  department: '',     // (you already added this)
   status: '',
-  source: ''
+  source: '',
+  accountCode: ''     // ← NEW
 });
+
 
 
 
@@ -65,6 +80,25 @@ const [manualForm, setManualForm] = useState({
 });
 
 
+// Multi-code allocations for Manual Expense
+const [allocations, setAllocations] = useState([{ accountCode: '', amount: '' }]);
+
+const addAllocation = () => {
+  setAllocations(prev => [...prev, { accountCode: '', amount: '' }]);
+};
+
+const removeAllocation = (idx) => {
+  setAllocations(prev => prev.filter((_, i) => i !== idx));
+};
+
+const updateAllocation = (idx, key, value) => {
+  setAllocations(prev =>
+    prev.map((row, i) => (i === idx ? { ...row, [key]: value } : row))
+  );
+};
+
+const sumAllocations = () =>
+  allocations.reduce((acc, a) => acc + (Number(a.amount) || 0), 0);
 
 
 
@@ -140,23 +174,32 @@ const [manualForm, setManualForm] = useState({
   
 
   const filteredInvoices = invoices.filter((inv) => {
-  const matchesVendor = inv.vendor?.toLowerCase().includes(searchTerm.toLowerCase());
-  const matchesInvoice = inv.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase());
+  const term = (searchTerm || '').toLowerCase();
+
+  const matchesVendor  = (inv.vendor || '').toLowerCase().includes(term);
+  const matchesInvoice = (inv.invoice_number || '').toLowerCase().includes(term);
 
   const matchesDepartment =
     !filters.department ||
     inv.department === filters.department ||
     (inv.dining_unit && `Dining - ${inv.dining_unit}` === filters.department);
 
+  const matchesAccount =
+    !filters.accountCode ||
+    inv.account_code === filters.accountCode ||
+    (Array.isArray(inv.allocations) &&
+      inv.allocations.some(a => String(a.accountCode) === filters.accountCode));
+
   const matchesFilters =
     (!filters.vendor || inv.vendor === filters.vendor) &&
     matchesDepartment &&
-    (!filters.diningUnit || inv.dining_unit === filters.diningUnit) &&
     (!filters.status || inv.status === filters.status) &&
-    (!filters.source || inv.source === filters.source);
+    (!filters.source || inv.source === filters.source) &&
+    matchesAccount;
 
   return (matchesVendor || matchesInvoice) && matchesFilters;
 });
+
 
 
   const totalAmount = filteredInvoices.reduce((acc, inv) => acc + parseFloat(inv.invoice_total || 0), 0);
@@ -194,7 +237,7 @@ const uploadManualFiles = async (uid, files) => {
 const handleManualSubmit = async () => {
   setSaving(true);
   try {
-    // 1) Validate required fields (you already had this)
+    // required fields
     const required = ['date_of_invoice','company','amount','department','invoice_number','expense_type','purpose'];
     for (const k of required) {
       if (!manualForm[k] || String(manualForm[k]).trim()==='') {
@@ -202,32 +245,45 @@ const handleManualSubmit = async () => {
       }
     }
     const amountNum = Number(manualForm.amount);
-    if (Number.isNaN(amountNum) || amountNum < 0) throw new Error('Amount must be a valid non-negative number.');
+    if (Number.isNaN(amountNum) || amountNum < 0) {
+      throw new Error('Invoice Total must be a valid non-negative number.');
+    }
 
-    // 2) Ensure a valid auth session + token exists
+    // allocations validation
+    const allocTotal = sumAllocations();
+    if (allocations.some(a => !a.accountCode || String(a.accountCode).trim().length !== 4)) {
+      throw new Error('Each allocation needs a 4-digit account code.');
+    }
+    if (allocations.length === 0 || allocTotal <= 0) {
+      throw new Error('Please allocate a positive amount to at least one account code.');
+    }
+    if (Math.abs(allocTotal - amountNum) > 0.005) {
+      throw new Error(`Allocations ($${allocTotal.toFixed(2)}) must equal the Invoice Total ($${amountNum.toFixed(2)}).`);
+    }
+
+    // auth/session
     const { data: sessionRes, error: sessErr } = await supabase.auth.getSession();
     if (sessErr) throw new Error(`Auth session error: ${sessErr.message}`);
     if (!sessionRes?.session?.access_token) {
-      // try to refresh once
       const { data: ref } = await supabase.auth.refreshSession();
       if (!ref?.session?.access_token) throw new Error('No active session. Please sign in again.');
     }
 
-    // 3) Get user (for paths/metadata)
     const { data: { user }, error: userErr } = await supabase.auth.getUser();
     if (userErr) throw new Error(`Auth user error: ${userErr.message}`);
     if (!user) throw new Error('You must be signed in.');
 
-    // 4) Upload files (comment out this block to test DB insert without storage)
-    const uploaded = await uploadManualFiles(user.id, manualFiles)
-      .catch(e => { throw new Error(`Storage upload failed: ${e.message}`); });
+    // upload files
+    const uploaded = await uploadManualFiles(user.id, manualFiles).catch(e => {
+      throw new Error(`Storage upload failed: ${e.message}`);
+    });
 
-    // 5) Map Dining unit for legacy compatibility
+    // map Dining to legacy dining_unit
     const diningUnit = manualForm.department.startsWith('Dining - ')
-      ? manualForm.department.replace('Dining - ', '')
+      ? manualForm.department.replace('Dining - ','')
       : null;
 
-    // 6) Insert row
+    // insert
     const { data, error } = await supabase.from('invoice_logs').insert([{
       source: 'manual',
       vendor: manualForm.company,
@@ -235,12 +291,17 @@ const handleManualSubmit = async () => {
       invoice_total: amountNum,
       department: manualForm.department,
       additional_department: manualForm.additional_department || null,
-      account_code: manualForm.account_code || null,
+      account_code: manualForm.account_code || null, // keep legacy single if provided
       purpose: manualForm.purpose,
       expense_type: manualForm.expense_type,
       notes: manualForm.notes || null,
-      attachments: uploaded,  // [{name, path, size, type}]
-      dining_unit: diningUnit,
+      // ✅ allocations saved as JSON
+      allocations: allocations.map(a => ({
+        accountCode: String(a.accountCode),
+        amount: Number(a.amount),
+      })),
+      attachments: uploaded,                 
+      dining_unit: diningUnit,               
       invoice_date: manualForm.date_of_invoice,
       date_received: manualForm.date_of_invoice,
       status: 'Submitted',
@@ -253,9 +314,11 @@ const handleManualSubmit = async () => {
 
     if (error) throw new Error(`DB insert failed: ${error.message}`);
 
+    // optimistic UI + reset
     setInvoices(prev => [data, ...prev]);
     setIsManualOpen(false);
     setManualFiles([]);
+    setAllocations([{ accountCode: '', amount: '' }]); // reset rows
     alert('✅ Manual expense added.');
   } catch (err) {
     console.error('[ManualExpense]', err);
@@ -264,6 +327,7 @@ const handleManualSubmit = async () => {
     setSaving(false);
   }
 };
+
 
 
 
@@ -291,22 +355,29 @@ const generatePDF = () => {
 
   // Table data
   const head = [[
-    'Vendor',
-    'Invoice #',
-    'Amount ($)',
-    'Dining Unit',
-    'Invoice Date',
-    'Date Received',
-    'Submitted By',
-    'Payment Method',
-    'Status',
-    'Date Submitted'
-  ]];
+  'Vendor',
+  'Invoice #',
+  'Amount ($)',
+  'Allocations',              // ← NEW
+  'Dining Unit',
+  'Invoice Date',
+  'Date Received',
+  'Submitted By',
+  'Payment Method',
+  'Status',
+  'Date Submitted'
+]];
 
-  const body = filteredInvoices.map(inv => ([
+const body = filteredInvoices.map(inv => {
+  const allocSummary = Array.isArray(inv.allocations)
+    ? inv.allocations.map(a => `${a.accountCode}: $${Number(a.amount || 0).toFixed(2)}`).join(' | ')
+    : (inv.account_code ? `${inv.account_code}: $${Number(inv.invoice_total || 0).toFixed(2)}` : '');
+
+  return [
     inv.vendor || '',
     inv.invoice_number || '',
     (parseFloat(inv.invoice_total || 0).toFixed(2)),
+    allocSummary,                      // ← matches the 'Allocations' column
     inv.dining_unit || '',
     inv.invoice_date || '',
     inv.date_received || '',
@@ -314,7 +385,9 @@ const generatePDF = () => {
     inv.payment_method || '',
     inv.status || '',
     inv.date_submitted ? new Date(inv.date_submitted).toLocaleDateString() : '—'
-  ]));
+  ];
+});
+
 
   doc.autoTable({
     head,
@@ -369,9 +442,16 @@ return (
             </label>
             <label className="flex flex-col text-sm">
               <span className="mb-1 font-medium">Amount *</span>
-              <input type="number" step="0.01" value={manualForm.amount}
-                onChange={e=>setManualForm({...manualForm, amount: e.target.value})}
-                className="border rounded p-2" />
+              <span className="mb-1 font-medium">Invoice Total *</span>
+<input
+  type="number"
+  step="0.01"
+  value={manualForm.amount}
+  onChange={e=>setManualForm({...manualForm, amount: e.target.value})}
+  className="border rounded p-2"
+  placeholder="e.g., 1234.56"
+/>
+
             </label>
             <label className="flex flex-col text-sm">
               <span className="mb-1 font-medium">Department *</span>
@@ -402,15 +482,17 @@ return (
             </label>
             <label className="flex flex-col text-sm">
               <span className="mb-1 font-medium">Type of Expense *</span>
-              <select value={manualForm.expense_type}
-                onChange={e=>setManualForm({...manualForm, expense_type: e.target.value})}
-                className="border rounded p-2">
-                <option value="">Select…</option>
-                <option>Ongoing</option>
-                <option>One time, expected</option>
-                <option>One time, unexpected</option>
-                <option>Passthrough/Reimbursable Expense</option>
-              </select>
+              
+              
+              <select
+  value={manualForm.expense_type}
+  onChange={e=>setManualForm({...manualForm, expense_type: e.target.value})}
+  className="border rounded p-2"
+>
+  <option value="">Select…</option>
+  {EXPENSE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+</select>
+
             </label>
             <label className="md:col-span-2 flex flex-col text-sm">
               <span className="mb-1 font-medium">Purpose *</span>
@@ -424,6 +506,75 @@ return (
                 onChange={e=>setManualForm({...manualForm, notes: e.target.value})}
                 className="border rounded p-2" />
             </label>
+
+
+
+
+
+            {/* Account Code Allocations */}
+<div className="md:col-span-2 border rounded p-3">
+  <div className="flex items-center justify-between mb-2">
+    <h3 className="font-medium">Account Code Allocations</h3>
+    <button
+      type="button"
+      onClick={addAllocation}
+      className="text-sm px-3 py-1 rounded border hover:bg-gray-50"
+    >
+      + Add Code
+    </button>
+  </div>
+
+  <div className="space-y-2">
+    {allocations.map((row, idx) => (
+      <div key={idx} className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="\d{4}"
+          maxLength={4}
+          placeholder="4-digit code (e.g., 1312)"
+          className="border rounded p-2 w-full"
+          value={row.accountCode}
+          onChange={(e) => updateAllocation(idx, 'accountCode', e.target.value)}
+        />
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          placeholder="Amount for this code"
+          className="border rounded p-2 w-full"
+          value={row.amount}
+          onChange={(e) => updateAllocation(idx, 'amount', e.target.value)}
+        />
+        <button
+          type="button"
+          onClick={() => removeAllocation(idx)}
+          className="justify-self-start md:justify-self-auto text-sm px-3 py-2 rounded border hover:bg-gray-50"
+        >
+          Remove
+        </button>
+      </div>
+    ))}
+  </div>
+
+  <div className="mt-2 text-sm text-gray-600">
+    Allocations total: <span className="font-semibold">
+      ${sumAllocations().toFixed(2)}
+    </span> / Invoice Total: <span className="font-semibold">
+      ${Number(manualForm.amount || 0).toFixed(2)}
+    </span>
+  </div>
+  <p className="mt-1 text-xs text-gray-500">
+    “Invoice Total” is the full vendor amount; allocations are what each 4-digit code pays.
+  </p>
+</div>
+
+
+
+
+
+
+
             <label className="md:col-span-2 flex flex-col text-sm">
               <span className="mb-1 font-medium">Attachments (up to 5)</span>
               <input type="file" multiple onChange={(e)=>setManualFiles(Array.from(e.target.files || []).slice(0,5))}
@@ -495,6 +646,20 @@ return (
 </div>
 
 
+<input
+  type="text"
+  inputMode="numeric"
+  pattern="\d{4}"
+  maxLength={4}
+  placeholder="4-digit code"
+  value={filters.accountCode}
+  onChange={(e) =>
+    setFilters({ ...filters, accountCode: e.target.value.trim() })
+  }
+  className="border p-2 rounded w-full md:w-40"
+/>
+
+
     {/* ACTION BAR */}
     <div className="flex items-center gap-2 mb-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -510,6 +675,16 @@ return (
             Purpose: inv.purpose || '',
             'Expense Type': inv.expense_type || '',
             'Account Code': inv.account_code || '',
+
+
+            Allocations: Array.isArray(inv.allocations)
+  ? inv.allocations
+      .map(a => `${a.accountCode}: $${Number(a.amount || 0).toFixed(2)}`)
+      .join(' | ')
+  : (inv.account_code ? `${inv.account_code}: $${Number(inv.invoice_total || 0).toFixed(2)}` : ''),
+
+
+
             Notes: inv.notes || '',
             'Submitted By': inv.submitted_by,
             'Payment Method': inv.payment_method,
@@ -531,12 +706,13 @@ return (
         </button>
 
         <button
-          onClick={() => setIsManualOpen(true)}
-          className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700"
-          type="button"
-        >
-          + Add Manual Expense
-        </button>
+  onClick={() => { setAllocations([{ accountCode: '', amount: '' }]); setIsManualOpen(true); }}
+  className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700"
+  type="button"
+>
+  + Add Manual Expense
+</button>
+
       </div>
 
       <div className="ml-auto whitespace-nowrap text-lg font-semibold text-green-800">
@@ -552,6 +728,7 @@ return (
             <th className="p-2 border">Vendor</th>
             <th className="p-2 border">Invoice #</th>
             <th className="p-2 border">Amount ($)</th>
+            <th className="p-2 border">Allocations</th>  {/* ← NEW */}
             <th className="p-2 border">Dining Unit</th>
             <th className="p-2 border">Invoice Date</th>
             <th className="p-2 border">Date Received</th>
@@ -567,6 +744,27 @@ return (
               <td className="p-2 border">{inv.vendor}</td>
               <td className="p-2 border">{inv.invoice_number}</td>
               <td className="p-2 border">${parseFloat(inv.invoice_total || 0).toFixed(2)}</td>
+
+
+
+
+              <td className="p-2 border">
+  {Array.isArray(inv.allocations) && inv.allocations.length
+    ? inv.allocations.map((a, i) => (
+        <span key={i} className="inline-block mr-2">
+          {a.accountCode}: ${Number(a.amount || 0).toFixed(2)}
+        </span>
+      ))
+    : (inv.account_code
+        ? `${inv.account_code}: $${Number(inv.invoice_total || 0).toFixed(2)}`
+        : '—')
+  }
+</td>
+
+
+
+
+
               <td className="p-2 border">{inv.dining_unit}</td>
               <td className="p-2 border">{inv.invoice_date}</td>
               <td className="p-2 border">{inv.date_received}</td>

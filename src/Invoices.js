@@ -39,8 +39,12 @@ const EXPENSE_TYPES = [
   'Ongoing',
   'One time, expected',
   'One time, unexpected',
-  'Passthrough/Reimbursable Expense'
+  'Passthrough/Reimbursable Expense',
+  'Monthly',
+  'Quarterly',
+  'Annual',
 ];
+
 
 export default function Invoices() {
   // ✅ All hooks go INSIDE the component
@@ -94,61 +98,106 @@ export default function Invoices() {
     return uploads;
   };
 
+
+// ⬇️ allocations state + helpers (INSIDE the component, not inside handleSubmit)
+const [allocations, setAllocations] = useState([{ accountCode: '', amount: '' }]);
+
+const addAllocation = () => {
+  setAllocations(prev => [...prev, { accountCode: '', amount: '' }]);
+};
+
+const removeAllocation = (idx) => {
+  setAllocations(prev => prev.filter((_, i) => i !== idx));
+};
+
+const updateAllocation = (idx, key, value) => {
+  setAllocations(prev =>
+    prev.map((row, i) => (i === idx ? { ...row, [key]: value } : row))
+  );
+};
+
+const sumAllocations = () =>
+  allocations.reduce((acc, a) => acc + (Number(a.amount) || 0), 0);
+
+
+
+
+
+
+
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      // Validate required fields
-      const required = [
-        'department', 'vendor', 'invoiceDate', 'date', 'invoiceNumber', 'invoiceTotal', 'purpose', 'expenseType'
-      ];
-      for (const k of required) {
-        if (!String((k === 'vendor' ? (form.vendor === 'Temp Agency' ? tempVendor : form.vendor) : form[k]) || '').trim()) {
-          throw new Error(`Please fill required field: ${k.replace(/([A-Z])/g, ' $1').trim()}`);
-        }
+  e.preventDefault();
+  setSaving(true);
+  try {
+    // Required fields
+    const vendorName =
+      form.vendor === 'Temp Agency' && tempVendor ? tempVendor : form.vendor;
+
+    const required = [
+      'department', 'invoiceDate', 'date', 'invoiceNumber',
+      'invoiceTotal', 'purpose', 'expenseType'
+    ];
+    for (const k of required) {
+      const v = k === 'vendor' ? vendorName : form[k];
+      if (!String(v ?? '').trim()) {
+        throw new Error(`Please fill required field: ${k.replace(/([A-Z])/g, ' $1').trim()}`);
       }
-      const amountNum = Number(form.invoiceTotal);
-      if (Number.isNaN(amountNum) || amountNum < 0) {
-        throw new Error('Invoice Total must be a valid non-negative number.');
-      }
+    }
 
-      // Ensure session
-      const { data: sessionRes, error: sessErr } = await supabase.auth.getSession();
-      if (sessErr) throw new Error(`Auth session error: ${sessErr.message}`);
-      if (!sessionRes?.session?.access_token) {
-        const { data: ref } = await supabase.auth.refreshSession();
-        if (!ref?.session?.access_token) throw new Error('No active session. Please sign in again.');
-      }
+    const amountNum = Number(form.invoiceTotal);
+    if (Number.isNaN(amountNum) || amountNum < 0) {
+      throw new Error('Invoice Total must be a valid non-negative number.');
+    }
 
-      // Get user for created_by and upload path
-      const { data: { user }, error: userErr } = await supabase.auth.getUser();
-      if (userErr) throw new Error(`Auth user error: ${userErr.message}`);
-      if (!user) throw new Error('You must be signed in.');
+    // Allocations validation
+    const invTotal = amountNum;
+    const allocTotal = sumAllocations();
+    if (allocations.some(a => !a.accountCode || String(a.accountCode).trim().length !== 4)) {
+      throw new Error('Each allocation needs a 4-digit account code.');
+    }
+    if (allocTotal <= 0) {
+      throw new Error('Please allocate a positive amount to at least one account code.');
+    }
+    if (Math.abs(allocTotal - invTotal) > 0.005) {
+      throw new Error(`Allocations ($${allocTotal.toFixed(2)}) must equal the Invoice Total ($${invTotal.toFixed(2)}).`);
+    }
 
-      // Resolve vendor name (Temp Agency or regular)
-      const vendorName = form.vendor === 'Temp Agency' && tempVendor ? tempVendor : form.vendor;
+    // Auth/session
+    const { data: sessionRes, error: sessErr } = await supabase.auth.getSession();
+    if (sessErr) throw new Error(`Auth session error: ${sessErr.message}`);
+    if (!sessionRes?.session?.access_token) {
+      const { data: ref } = await supabase.auth.refreshSession();
+      if (!ref?.session?.access_token) throw new Error('No active session. Please sign in again.');
+    }
 
-      // Upload attachments
-      const uploaded = await uploadFiles(user.id, files)
-        .catch(e => { throw new Error(`Storage upload failed: ${e.message}`); });
+    const { data: { user }, error: userErr } = await supabase.auth.getUser();
+    if (userErr) throw new Error(`Auth user error: ${userErr.message}`);
+    if (!user) throw new Error('You must be signed in.');
 
-      // Map Dining department to legacy dining_unit (kept for your table)
-      const diningUnit =
-        form.department.startsWith('Dining - ')
-          ? form.department.replace('Dining - ', '')
-          : null;
+    // Upload files (if any)
+    const uploaded = await uploadFiles(user.id, files).catch(e => {
+      throw new Error(`Storage upload failed: ${e.message}`);
+    });
 
-      // Insert into invoice_logs with new fields
-      const { data, error } = await supabase.from('invoice_logs').insert([{
-        source: 'form',                          // NEW: distinguishes from manual
-        // Common/legacy fields you already had:
+    // Map Dining to legacy dining_unit
+    const diningUnit = form.department.startsWith('Dining - ')
+      ? form.department.replace('Dining - ', '')
+      : null;
+
+    // INSERT (✅ allocations are INSIDE the object)
+    const { data: inserted, error: insertErr } = await supabase
+      .from('invoice_logs')
+      .insert([{
+        source: 'form',
+
+        // common/legacy fields
         name: form.name || null,
         email: form.email || null,
         vendor: vendorName,
         submitted_by: form.submittedBy || form.email || null,
         original_recipient: form.originalRecipient || null,
         entity: form.entity || null,
-        dining_unit: diningUnit,                 // legacy; null for non-Dining
+        dining_unit: diningUnit,
         invoice_date: form.invoiceDate,
         date_received: form.date,
         invoice_number: form.invoiceNumber,
@@ -159,42 +208,49 @@ export default function Invoices() {
         week_ending: form.weekEnding || null,
         memo: form.memo || null,
         payment_method: form.paymentMethod || null,
-        status: 'Submitted',
-        date_submitted: new Date().toISOString(),
 
-        // NEW Auxiliary fields:
+        // auxiliary fields
         department: form.department,
         additional_department: form.additionalDepartment || null,
-        account_code: form.accountCode || null,
+        account_code: form.accountCode || null, // optional single code (legacy)
         purpose: form.purpose,
         expense_type: form.expenseType,
-        attachments: uploaded,                   // [{name,path,size,type}]
+
+        // ✅ allocations included here
+        allocations: allocations.map(a => ({
+          accountCode: String(a.accountCode),
+          amount: Number(a.amount),
+        })),
+
+        // files + audit
+        attachments: uploaded,  // [{name, path, size, type}]
         created_by: user.id,
         created_by_email: user.email,
-      }]).select('*').single();
+        date_submitted: new Date().toISOString(),
+        status: 'Submitted',
+      }])
+      .select('*')
+      .single();
 
-      if (error) throw new Error(`DB insert failed: ${error.message}`);
+    if (insertErr) throw new Error(`DB insert failed: ${insertErr.message}`);
 
-      alert('Invoice successfully submitted and saved!');
-      // Reset form
-      setForm({
-        name: '', email: '', vendor: '', invoiceDate: '', date: '',
-        invoiceNumber: '', diningUnit: '', entity: '', weekEnding: '',
-        invoiceTotal: '', customerNumber: '', orderNumber: '',
-        purchaseOrder: '', memo: '', submittedBy: '', originalRecipient: '',
-        department: '', additionalDepartment: '', accountCode: '',
-        purpose: '', expenseType: '', paymentMethod: ''
-      });
-      setShowTempVendors(false);
-      setTempVendor('');
-      setFiles([]);
-    } catch (err) {
-      console.error('[Invoice Form]', err);
-      alert(`❌ ${err.message ?? 'Failed to submit invoice.'}`);
-    } finally {
-      setSaving(false);
-    }
-  };
+    alert('Invoice successfully submitted and saved!');
+
+    // Reset form + allocations + files
+    setForm(INITIAL_FORM);
+    setAllocations([{ accountCode: '', amount: '' }]);
+    setFiles([]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setShowTempVendors(false);
+    setTempVendor('');
+  } catch (err) {
+    console.error('[Invoice Form]', err);
+    alert(`❌ ${err.message ?? 'Failed to submit invoice.'}`);
+  } finally {
+    setSaving(false);
+  }
+};
+
 
   const handleDownload = () => {
     const content = JSON.stringify({ ...form, resolvedVendor: form.vendor === 'Temp Agency' && tempVendor ? tempVendor : form.vendor }, null, 2);
@@ -375,6 +431,73 @@ export default function Invoices() {
     placeholder="e.g., $1234.56"
   />
 </div>
+
+
+
+{/* Account Code Allocations */}
+<div className="md:col-span-2 border rounded p-3">
+  <div className="flex items-center justify-between mb-2">
+    <h3 className="font-medium">Account Code Allocations</h3>
+    <button
+      type="button"
+      onClick={addAllocation}
+      className="text-sm px-3 py-1 rounded border hover:bg-gray-50"
+    >
+      + Add Code
+    </button>
+  </div>
+
+  <div className="space-y-2">
+    {allocations.map((row, idx) => (
+      <div key={idx} className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="\d{4}"
+          maxLength={4}
+          placeholder="4-digit code (e.g., 1312)"
+          className="border rounded p-2 w-full"
+          value={row.accountCode}
+          onChange={(e) => updateAllocation(idx, 'accountCode', e.target.value)}
+        />
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          placeholder="Amount for this code"
+          className="border rounded p-2 w-full"
+          value={row.amount}
+          onChange={(e) => updateAllocation(idx, 'amount', e.target.value)}
+        />
+        <button
+          type="button"
+          onClick={() => removeAllocation(idx)}
+          className="justify-self-start md:justify-self-auto text-sm px-3 py-2 rounded border hover:bg-gray-50"
+        >
+          Remove
+        </button>
+      </div>
+    ))}
+  </div>
+
+  <div className="mt-2 text-sm text-gray-600">
+    Allocations total: <span className="font-semibold">
+      ${sumAllocations().toFixed(2)}
+    </span> / Invoice Total: <span className="font-semibold">
+      ${Number(form.invoiceTotal || 0).toFixed(2)}
+    </span>
+  </div>
+  <p className="mt-1 text-xs text-gray-500">
+    Tip: This should answer “is the Amount the invoice or what our code pays?”
+    — The box above is the full Invoice Total; allocations here are what each code pays.
+  </p>
+</div>
+
+
+
+
+
+
 
           <div>
   <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
