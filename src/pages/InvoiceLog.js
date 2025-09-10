@@ -4,6 +4,8 @@ import { CSVLink } from 'react-csv';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import BackToAdminDashboard from '../BackToAdminDashboard';
+import { Link } from 'react-router-dom';
+
 
 
 
@@ -415,191 +417,251 @@ const body = filteredInvoices.map(inv => {
 
 
 return (
-  <div className="p-6 max-w-7xl mx-auto">
+ <div className="p-6 max-w-7xl mx-auto">
+  <div className="flex items-center justify-between mb-4">
     <BackToAdminDashboard />
-    {/* Manual Expense Modal */}
-    {isManualOpen && (
-      <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-        <div className="bg-white w-full max-w-3xl rounded-2xl shadow-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Add Manual Expense</h2>
-            <button onClick={() => setIsManualOpen(false)} className="text-gray-500 hover:text-gray-700">✕</button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* --- keep your existing modal fields exactly as you have them --- */}
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 font-medium">Date of Invoice *</span>
-              <input type="date" value={manualForm.date_of_invoice}
-                onChange={e=>setManualForm({...manualForm, date_of_invoice: e.target.value})}
-                className="border rounded p-2" />
-            </label>
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 font-medium">Company Being Paid *</span>
-              <input type="text" value={manualForm.company}
-                onChange={e=>setManualForm({...manualForm, company: e.target.value})}
-                className="border rounded p-2" />
-            </label>
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 font-medium">Amount *</span>
-              <span className="mb-1 font-medium">Invoice Total *</span>
-<input
-  type="number"
-  step="0.01"
-  value={manualForm.amount}
-  onChange={e=>setManualForm({...manualForm, amount: e.target.value})}
-  className="border rounded p-2"
-  placeholder="e.g., 1234.56"
-/>
-
-            </label>
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 font-medium">Department *</span>
-              <select value={manualForm.department}
-                onChange={e=>setManualForm({...manualForm, department: e.target.value})}
-                className="border rounded p-2">
-                <option value="">Select…</option>
-                {departmentOptions.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-            </label>
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 font-medium">Additional Department (if any)</span>
-              <input type="text" value={manualForm.additional_department}
-                onChange={e=>setManualForm({...manualForm, additional_department: e.target.value})}
-                className="border rounded p-2" />
-            </label>
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 font-medium">Account Code (4 digits)</span>
-              <input type="text" value={manualForm.account_code}
-                onChange={e=>setManualForm({...manualForm, account_code: e.target.value})}
-                className="border rounded p-2" />
-            </label>
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 font-medium">Invoice # from Company *</span>
-              <input type="text" value={manualForm.invoice_number}
-                onChange={e=>setManualForm({...manualForm, invoice_number: e.target.value})}
-                className="border rounded p-2" />
-            </label>
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 font-medium">Type of Expense *</span>
-              
-              
-              <select
-  value={manualForm.expense_type}
-  onChange={e=>setManualForm({...manualForm, expense_type: e.target.value})}
-  className="border rounded p-2"
->
-  <option value="">Select…</option>
-  {EXPENSE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-</select>
-
-            </label>
-            <label className="md:col-span-2 flex flex-col text-sm">
-              <span className="mb-1 font-medium">Purpose *</span>
-              <input type="text" value={manualForm.purpose}
-                onChange={e=>setManualForm({...manualForm, purpose: e.target.value})}
-                className="border rounded p-2" />
-            </label>
-            <label className="md:col-span-2 flex flex-col text-sm">
-              <span className="mb-1 font-medium">Notes</span>
-              <textarea rows={3} value={manualForm.notes}
-                onChange={e=>setManualForm({...manualForm, notes: e.target.value})}
-                className="border rounded p-2" />
-            </label>
-
-
-
-
-
-            {/* Account Code Allocations */}
-<div className="md:col-span-2 border rounded p-3">
-  <div className="flex items-center justify-between mb-2">
-    <h3 className="font-medium">Account Code Allocations</h3>
-    <button
-      type="button"
-      onClick={addAllocation}
-      className="text-sm px-3 py-1 rounded border hover:bg-gray-50"
+    <Link
+      to="/invoices"
+      className="text-sm bg-indigo-600 text-white px-3 py-2 rounded hover:bg-indigo-700"
     >
-      + Add Code
-    </button>
+      Process an Invoice
+    </Link>
   </div>
 
-  <div className="space-y-2">
-    {allocations.map((row, idx) => (
-      <div key={idx} className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
-        <input
-          type="text"
-          inputMode="numeric"
-          pattern="\d{4}"
-          maxLength={4}
-          placeholder="4-digit code (e.g., 1312)"
-          className="border rounded p-2 w-full"
-          value={row.accountCode}
-          onChange={(e) => updateAllocation(idx, 'accountCode', e.target.value)}
-        />
-        <input
-          type="number"
-          step="0.01"
-          min="0"
-          placeholder="Amount for this code"
-          className="border rounded p-2 w-full"
-          value={row.amount}
-          onChange={(e) => updateAllocation(idx, 'amount', e.target.value)}
-        />
-        <button
-          type="button"
-          onClick={() => removeAllocation(idx)}
-          className="justify-self-start md:justify-self-auto text-sm px-3 py-2 rounded border hover:bg-gray-50"
-        >
-          Remove
-        </button>
-      </div>
-    ))}
-  </div>
 
-  <div className="mt-2 text-sm text-gray-600">
-    Allocations total: <span className="font-semibold">
-      ${sumAllocations().toFixed(2)}
-    </span> / Invoice Total: <span className="font-semibold">
-      ${Number(manualForm.amount || 0).toFixed(2)}
-    </span>
-  </div>
-  <p className="mt-1 text-xs text-gray-500">
-    “Invoice Total” is the full vendor amount; allocations are what each 4-digit code pays.
-  </p>
-</div>
+ 
 
+    {/* Manual Expense Modal */}
+{isManualOpen && (
+  <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+    {/* Modal container: flex column + height cap */}
+    <div className="bg-white w-full max-w-3xl rounded-2xl shadow-xl flex flex-col max-h-[90vh] overflow-hidden">
 
-
-
-
-
-
-            <label className="md:col-span-2 flex flex-col text-sm">
-              <span className="mb-1 font-medium">Attachments (up to 5)</span>
-              <input type="file" multiple onChange={(e)=>setManualFiles(Array.from(e.target.files || []).slice(0,5))}
-                className="border rounded p-2" />
-              <span className="text-xs text-gray-500 mt-1">PDF, images, etc. Max 100MB each.</span>
-            </label>
-          </div>
-
-          <div className="mt-6 flex justify-end gap-2">
-            <button onClick={()=>setIsManualOpen(false)} className="px-4 py-2 rounded border">Cancel</button>
-
-            <button
-  onClick={handleManualSubmit}
-  disabled={saving}
-  className={`px-4 py-2 rounded text-white ${saving ? 'bg-indigo-400' : 'bg-indigo-600 hover:bg-indigo-700'}`}
->
-  {saving ? 'Saving…' : 'Save Expense'}
-</button>
-
-          </div>
+      {/* Sticky header */}
+      <div className="p-6 border-b bg-white sticky top-0 z-10">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Add Manual Expense</h2>
+          <button
+            onClick={() => setIsManualOpen(false)}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            ✕
+          </button>
         </div>
       </div>
-    )}
 
-    <h1 className="text-2xl font-bold text-blue-900 mb-4">📄 Submitted Invoices</h1>
+      {/* Scrollable content */}
+      <div className="px-6 py-4 overflow-y-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* your existing fields unchanged */}
+          <label className="flex flex-col text-sm">
+            <span className="mb-1 font-medium">Date of Invoice *</span>
+            <input
+              type="date"
+              value={manualForm.date_of_invoice}
+              onChange={e => setManualForm({ ...manualForm, date_of_invoice: e.target.value })}
+              className="border rounded p-2"
+            />
+          </label>
+
+          <label className="flex flex-col text-sm">
+            <span className="mb-1 font-medium">Company Being Paid *</span>
+            <input
+              type="text"
+              value={manualForm.company}
+              onChange={e => setManualForm({ ...manualForm, company: e.target.value })}
+              className="border rounded p-2"
+            />
+          </label>
+
+          <label className="flex flex-col text-sm">
+            <span className="mb-1 font-medium">Invoice Total *</span>
+            <input
+              type="number"
+              step="0.01"
+              value={manualForm.amount}
+              onChange={e => setManualForm({ ...manualForm, amount: e.target.value })}
+              className="border rounded p-2"
+              placeholder="e.g., 1234.56"
+            />
+          </label>
+
+          <label className="flex flex-col text-sm">
+            <span className="mb-1 font-medium">Department *</span>
+            <select
+              value={manualForm.department}
+              onChange={e => setManualForm({ ...manualForm, department: e.target.value })}
+              className="border rounded p-2"
+            >
+              <option value="">Select…</option>
+              {departmentOptions.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col text-sm">
+            <span className="mb-1 font-medium">Additional Department (if any)</span>
+            <input
+              type="text"
+              value={manualForm.additional_department}
+              onChange={e => setManualForm({ ...manualForm, additional_department: e.target.value })}
+              className="border rounded p-2"
+            />
+          </label>
+
+          <label className="flex flex-col text-sm">
+            <span className="mb-1 font-medium">Account Code (legacy single)</span>
+            <input
+              type="text"
+              value={manualForm.account_code}
+              onChange={e => setManualForm({ ...manualForm, account_code: e.target.value })}
+              className="border rounded p-2"
+              placeholder="Optional single 4-digit (legacy)"
+            />
+          </label>
+
+          <label className="flex flex-col text-sm">
+            <span className="mb-1 font-medium">Invoice # from Company *</span>
+            <input
+              type="text"
+              value={manualForm.invoice_number}
+              onChange={e => setManualForm({ ...manualForm, invoice_number: e.target.value })}
+              className="border rounded p-2"
+            />
+          </label>
+
+          <label className="flex flex-col text-sm">
+            <span className="mb-1 font-medium">Type of Expense *</span>
+            <select
+              value={manualForm.expense_type}
+              onChange={e => setManualForm({ ...manualForm, expense_type: e.target.value })}
+              className="border rounded p-2"
+            >
+              <option value="">Select…</option>
+              <option>Ongoing</option>
+              <option>One time, expected</option>
+              <option>One time, unexpected</option>
+              <option>Passthrough/Reimbursable Expense</option>
+              <option>Monthly</option>
+              <option>Quarterly</option>
+              <option>Annual</option>
+            </select>
+          </label>
+
+          <label className="md:col-span-2 flex flex-col text-sm">
+            <span className="mb-1 font-medium">Purpose *</span>
+            <input
+              type="text"
+              value={manualForm.purpose}
+              onChange={e => setManualForm({ ...manualForm, purpose: e.target.value })}
+              className="border rounded p-2"
+            />
+          </label>
+
+          <label className="md:col-span-2 flex flex-col text-sm">
+            <span className="mb-1 font-medium">Notes</span>
+            <textarea
+              rows={3}
+              value={manualForm.notes}
+              onChange={e => setManualForm({ ...manualForm, notes: e.target.value })}
+              className="border rounded p-2"
+            />
+          </label>
+
+          {/* Allocations */}
+          <div className="md:col-span-2 border rounded p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-medium">Account Code Allocations</h3>
+              <button
+                type="button"
+                onClick={addAllocation}
+                className="text-sm px-3 py-1 rounded border hover:bg-gray-50"
+              >
+                + Add Code
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {allocations.map((row, idx) => (
+                <div key={idx} className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="\d{4}"
+                    maxLength={4}
+                    placeholder="4-digit code (e.g., 1312)"
+                    className="border rounded p-2 w-full"
+                    value={row.accountCode}
+                    onChange={(e) => updateAllocation(idx, 'accountCode', e.target.value)}
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Amount for this code"
+                    className="border rounded p-2 w-full"
+                    value={row.amount}
+                    onChange={(e) => updateAllocation(idx, 'amount', e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeAllocation(idx)}
+                    className="justify-self-start md:justify-self-auto text-sm px-3 py-2 rounded border hover:bg-gray-50"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-2 text-sm text-gray-600">
+              Allocations total: <span className="font-semibold">
+                ${sumAllocations().toFixed(2)}
+              </span> / Invoice Total: <span className="font-semibold">
+                ${Number(manualForm.amount || 0).toFixed(2)}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-gray-500">
+              “Invoice Total” is the full vendor amount; allocations are what each 4-digit code pays.
+            </p>
+          </div>
+
+          <label className="md:col-span-2 flex flex-col text-sm">
+            <span className="mb-1 font-medium">Attachments (up to 5)</span>
+            <input
+              type="file"
+              multiple
+              onChange={(e)=>setManualFiles(Array.from(e.target.files || []).slice(0,5))}
+              className="border rounded p-2"
+            />
+            <span className="text-xs text-gray-500 mt-1">PDF, images, etc. Max 100MB each.</span>
+          </label>
+        </div>
+      </div>
+
+      {/* Sticky footer */}
+      <div className="p-6 border-t bg-white sticky bottom-0 z-10">
+        <div className="flex justify-end gap-2">
+          <button onClick={() => setIsManualOpen(false)} className="px-4 py-2 rounded border">
+            Cancel
+          </button>
+          <button
+            onClick={handleManualSubmit}
+            disabled={saving}
+            className={`px-4 py-2 rounded text-white ${saving ? 'bg-indigo-400' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+          >
+            {saving ? 'Saving…' : 'Save Expense'}
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+)}
+
+
+    <h1 className="text-2xl font-bold text-blue-900 mb-4">📄 Submitted Invoices ~ Expense Tracker</h1>
 
 {/* FILTERS */}
 <div className="flex flex-col md:flex-row md:flex-nowrap gap-4 mb-4">

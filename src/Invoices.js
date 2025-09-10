@@ -1,6 +1,8 @@
 import React, { useState, useRef } from 'react';
 import BackToAdminDashboard from './BackToAdminDashboard';
 import { supabase } from './supabaseClient';
+import { Link } from 'react-router-dom';
+
 
 // Single source of truth for form defaults (OK to keep outside the component)
 const INITIAL_FORM = {
@@ -9,8 +11,7 @@ const INITIAL_FORM = {
   vendor: '',
   invoiceDate: '',
   date: '',                    // Date invoice was received by submitter
-  invoiceNumber: '',
-  diningUnit: '',              // legacy compatibility (auto-filled for Dining)
+  invoiceNumber: '',              // legacy compatibility (auto-filled for Dining)
   entity: '',
   weekEnding: '',
   invoiceTotal: '',
@@ -23,7 +24,6 @@ const INITIAL_FORM = {
   // NEW fields for Auxiliary
   department: '',              // REQUIRED
   additionalDepartment: '',
-  accountCode: '',
   purpose: '',                 // REQUIRED
   expenseType: '',             // REQUIRED
   paymentMethod: '',
@@ -265,8 +265,17 @@ const sumAllocations = () =>
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <BackToAdminDashboard />
-      <h1 className="text-2xl font-bold mb-6 text-blue-900">Invoice Processing</h1>
+  <div className="flex items-center justify-between mb-4">
+    <BackToAdminDashboard />
+    <Link
+      to="/invoice-log"
+      className="text-sm bg-slate-700 text-white px-3 py-2 rounded hover:bg-slate-800"
+    >
+      See Expense Tracker
+    </Link>
+  </div>
+
+  <h1 className="text-2xl font-bold mb-6 text-blue-900">Invoice Processing</h1>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -513,7 +522,7 @@ const sumAllocations = () =>
   </select>
 </div>
 
-          <input type="text" name="accountCode" placeholder="Account Code (4 digits)" value={form.accountCode} onChange={handleChange} className="border rounded p-2 w-full" />
+          
 
           {/* Purpose / Expense Type */}
           <input type="text" name="purpose" placeholder="Purpose *" value={form.purpose} onChange={handleChange} className="border rounded p-2 w-full md:col-span-2" />
@@ -530,17 +539,7 @@ const sumAllocations = () =>
             </select>
           </div>
 
-          {/* Legacy Dining unit (auto-filled for Dining departments; you can hide this if you prefer) */}
-          <select name="diningUnit" value={form.diningUnit} onChange={handleChange} className="border rounded p-2 w-full">
-            <option value="">Select Dining Unit (if applicable)</option>
-            <option value="Regattas">Regattas</option>
-            <option value="Commons">Commons</option>
-            <option value="Discovery Cafe">Discovery Cafe</option>
-            <option value="Einstein's">Einstein's</option>
-            <option value="F.I.T">F.I.T</option>
-            <option value="Palette">Palette</option>
-          </select>
-
+         
           {/* Entity */}
           <select name="entity" value={form.entity} onChange={handleChange} className="border rounded p-2 w-full">
             <option value="">Select Paying Entity</option>
