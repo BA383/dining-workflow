@@ -48,6 +48,22 @@ export default function InvoiceLog() {
 
 
 
+// paging + totals
+const [page, setPage] = useState(1);
+const pageSize = 50;
+const [totalCount, setTotalCount] = useState(0);
+
+// date filtering/sorting you chose to drive on server
+const [dateField, setDateField] = useState('date_submitted'); // 'invoice_date' | 'date_received'
+const [dateStart, setDateStart] = useState(''); // yyyy-mm-dd
+const [dateEnd, setDateEnd] = useState('');
+const [dateSort, setDateSort] = useState('desc'); // 'asc' | 'desc'
+
+
+
+
+
+
 const mergedDepartmentOptions = useMemo(() => {
   const fromRows = invoices.map(inv => inv.department).filter(Boolean);
   const fromDining = invoices
@@ -79,6 +95,7 @@ const [manualForm, setManualForm] = useState({
   purpose: '',
   invoice_number: '',
   expense_type: '', // 'Ongoing' | 'One time, expected' | ...
+  payment_method: '', // 'SPCC' | 'AP Office'
 });
 
 
@@ -104,115 +121,186 @@ const sumAllocations = () =>
 
 
 
-  useEffect(() => {
-    const fetchInvoices = async () => {
-      setLoading(true);
+useEffect(() => {
+  const fetchInvoicesServer = async () => {
+    setLoading(true);
+    setError(null);
 
-      const {
-        data: { user },
-        error: userError
-      } = await supabase.auth.getUser();
+    // auth + profile (same as you have)
+    const {
+      data: { user },
+      error: userError
+    } = await supabase.auth.getUser();
 
-      if (userError || !user) {
-        setBlocked(true);
-        return;
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role, unit')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError || !profile) {
-        setBlocked(true);
-        return;
-      }
-
-      setUserRole(profile.role);
-      setUserUnit(profile.unit);
-
-      const { data, error } = await supabase
-        .from('invoice_logs')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        setError(error.message);
-      } else {
-        const filtered = profile.role === 'admin'
-          ? data
-          : data.filter((inv) => inv.dining_unit === profile.unit);
-
-        setInvoices(filtered);
-      }
-
+    if (userError || !user) {
+      setBlocked(true);
       setLoading(false);
-    };
+      return;
+    }
 
-    fetchInvoices();
-  }, []);
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role, unit')
+      .eq('id', user.id)
+      .single();
 
-  const handleMarkProcessed = async (invoiceId) => {
-    const { error } = await supabase
+    if (profileError || !profile) {
+      setBlocked(true);
+      setLoading(false);
+      return;
+    }
+
+    setUserRole(profile.role);
+    setUserUnit(profile.unit);
+
+    // --- Build server query (range + sort + filters + count + pagination) ---
+    const field = dateField;                // 'date_submitted' | 'invoice_date' | 'date_received'
+    const ascending = dateSort === 'asc';
+    const from = (page - 1) * pageSize;
+    const to   = from + pageSize - 1;
+
+    let q = supabase
+      .from('invoice_logs')
+      .select('*', { count: 'exact' });
+
+    // RLS guard - do not overfetch
+    if (profile.role !== 'admin') {
+      q = q.eq('dining_unit', profile.unit);
+    }
+
+    // Date range (inclusive end-day)
+    if (dateStart) q = q.gte(field, dateStart);
+    if (dateEnd) {
+    const d = new Date(dateEnd);
+    const nextISO = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)
+   .toISOString()
+   .slice(0, 10); // yyyy-mm-dd
+   q = q.lt(field, nextISO);
+   }
+    // Other filters
+    if (filters.status)     q = q.eq('status', filters.status);
+    if (filters.source)     q = q.eq('source', filters.source);
+    if (filters.department) q = q.eq('department', filters.department);
+
+    if (filters.accountCode) {
+    const code = filters.accountCode;
+    const json = encodeURIComponent(JSON.stringify([{ accountCode: code }]));
+    q = q.or(`account_code.eq.${code},allocations.cs.${json}`);
+   }
+
+    // Search (vendor or invoice #)
+    if (searchTerm?.trim()) {
+      const s = `%${searchTerm.trim()}%`;
+      q = q.or(`vendor.ilike.${s},invoice_number.ilike.${s}`);
+    }
+
+    // Sort + paginate
+    q = q.order(field, { ascending }).range(from, to);
+
+    const { data, count, error } = await q;
+
+    if (error) {
+      setError(error.message);
+      setInvoices([]);
+      setTotalCount(0);
+    } else {
+      setInvoices(data || []);
+      setTotalCount(count || 0);
+    }
+
+    setLoading(false);
+  };
+
+  fetchInvoicesServer();
+  // Re-run whenever these change:
+  // page / filters / search / date field-range-sort
+}, [
+  page,
+  pageSize,
+  filters.department,
+  filters.status,
+  filters.source,
+  filters.accountCode,
+  searchTerm,
+  dateField,
+  dateStart,
+  dateEnd,
+  dateSort
+]);
+
+const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+useEffect(() => {
+  setPage(1);
+}, [filters, searchTerm, dateField, dateStart, dateEnd, dateSort]);
+
+
+
+// --- Mark as Processed (robust) ---
+const handleMarkProcessed = async (invoiceId) => {
+  try {
+    // try status+approval_date first
+    let { error } = await supabase
       .from('invoice_logs')
       .update({ status: 'Processed', approval_date: new Date().toISOString() })
       .eq('id', invoiceId);
 
-    if (error) {
-      alert('❌ Failed to update invoice status.');
-      console.error(error);
-    } else {
-      setInvoices((prev) =>
-        prev.map((inv) =>
-          inv.id === invoiceId ? { ...inv, status: 'Processed' } : inv
-        )
-      );
+    // if API says the column isn't known, retry without it
+    if (
+      error &&
+      /approval_date/i.test(error.message) &&
+      /(does not exist|not found|schema cache)/i.test(error.message)
+    ) {
+      const retry = await supabase
+        .from('invoice_logs')
+        .update({ status: 'Processed' })
+        .eq('id', invoiceId);
+      error = retry.error || null;
     }
-  };
 
+    if (error) {
+      alert(`❌ ${error.message}`);
+      console.error('[MarkProcessed]', error);
+      return;
+    }
 
-
-  
-
-  const filteredInvoices = invoices.filter((inv) => {
-  const term = (searchTerm || '').toLowerCase();
-
-  const matchesVendor  = (inv.vendor || '').toLowerCase().includes(term);
-  const matchesInvoice = (inv.invoice_number || '').toLowerCase().includes(term);
-
-  const matchesDepartment =
-    !filters.department ||
-    inv.department === filters.department ||
-    (inv.dining_unit && `Dining - ${inv.dining_unit}` === filters.department);
-
-  const matchesAccount =
-    !filters.accountCode ||
-    inv.account_code === filters.accountCode ||
-    (Array.isArray(inv.allocations) &&
-      inv.allocations.some(a => String(a.accountCode) === filters.accountCode));
-
-  const matchesFilters =
-    (!filters.vendor || inv.vendor === filters.vendor) &&
-    matchesDepartment &&
-    (!filters.status || inv.status === filters.status) &&
-    (!filters.source || inv.source === filters.source) &&
-    matchesAccount;
-
-  return (matchesVendor || matchesInvoice) && matchesFilters;
-});
-
-
-
-  const totalAmount = filteredInvoices.reduce((acc, inv) => acc + parseFloat(inv.invoice_total || 0), 0);
-
-  if (blocked) {
-    return (
-      <div className="p-6 text-red-700 font-medium">
-        🚫 Access Denied: Only administrators may view the invoice log.
-      </div>
+    setInvoices((prev) =>
+      prev.map((inv) =>
+        inv.id === invoiceId
+          ? { ...inv, status: 'Processed', approval_date: new Date().toISOString() }
+          : inv
+      )
     );
+  } catch (e) {
+    console.error('[MarkProcessed:catch]', e);
+    alert(`❌ ${e?.message ?? 'Failed to update invoice status.'}`);
   }
+};
+
+
+
+// --- REMOVE all client-side filtering (the inv.* code that was here) ---
+// No more: term/matchesVendor/matchesInvoice/matchesDepartment/etc.
+// The server query already applied filters/sort/pagination.
+
+// Page (on-screen) total only:
+const totalAmount = invoices.reduce(
+  (acc, inv) => acc + Number(inv.invoice_total || 0),
+  0
+);
+
+// Optional guards if you want to surface these states here:
+if (blocked) {
+  return (
+    <div className="p-6 text-red-700 font-medium">
+      🚫 Access Denied: Only administrators may view the invoice log.
+    </div>
+  );
+}
+// If you track loading/error, you can also early-return here:
+// if (loading) return <div className="p-6">Loading…</div>;
+// if (error)   return <div className="p-6 text-red-700">Error: {error}</div>;
+
 
 
 
@@ -240,7 +328,7 @@ const handleManualSubmit = async () => {
   setSaving(true);
   try {
     // required fields
-    const required = ['date_of_invoice','company','amount','department','invoice_number','expense_type','purpose'];
+    const required = ['date_of_invoice','company','amount','department','invoice_number','expense_type','purpose','payment_method'];
     for (const k of required) {
       if (!manualForm[k] || String(manualForm[k]).trim()==='') {
         throw new Error(`Please fill required field: ${k.replaceAll('_',' ')}`);
@@ -307,7 +395,7 @@ const handleManualSubmit = async () => {
       invoice_date: manualForm.date_of_invoice,
       date_received: manualForm.date_of_invoice,
       status: 'Submitted',
-      payment_method: 'N/A',
+      payment_method: manualForm.payment_method,
       submitted_by: user.email,
       created_by: user.id,
       created_by_email: user.email,
@@ -332,9 +420,6 @@ const handleManualSubmit = async () => {
 
 
 
-
-
-
 const generatePDF = () => {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'A4' });
 
@@ -349,7 +434,7 @@ const generatePDF = () => {
 
   // (Optional) show active filters in the header
   const filterParts = [];
-  if (filters?.diningUnit) filterParts.push(`Unit: ${filters.diningUnit}`);
+  if (filters?.department) filterParts.push(`Department: ${filters.department}`);
   if (filters?.status) filterParts.push(`Status: ${filters.status}`);
   if (searchTerm) filterParts.push(`Search: "${searchTerm}"`);
   const filterLine = filterParts.join('  •  ');
@@ -361,7 +446,7 @@ const generatePDF = () => {
   'Invoice #',
   'Amount ($)',
   'Allocations',              // ← NEW
-  'Dining Unit',
+  'Department',
   'Invoice Date',
   'Date Received',
   'Submitted By',
@@ -370,7 +455,8 @@ const generatePDF = () => {
   'Date Submitted'
 ]];
 
-const body = filteredInvoices.map(inv => {
+// Build PDF rows from the current page of server-filtered results
+const body = invoices.map(inv => {
   const allocSummary = Array.isArray(inv.allocations)
     ? inv.allocations.map(a => `${a.accountCode}: $${Number(a.amount || 0).toFixed(2)}`).join(' | ')
     : (inv.account_code ? `${inv.account_code}: $${Number(inv.invoice_total || 0).toFixed(2)}` : '');
@@ -379,8 +465,8 @@ const body = filteredInvoices.map(inv => {
     inv.vendor || '',
     inv.invoice_number || '',
     (parseFloat(inv.invoice_total || 0).toFixed(2)),
-    allocSummary,                      // ← matches the 'Allocations' column
-    inv.dining_unit || '',
+    allocSummary,
+    inv.department || inv.dining_unit || '',
     inv.invoice_date || '',
     inv.date_received || '',
     inv.submitted_by || '',
@@ -390,30 +476,25 @@ const body = filteredInvoices.map(inv => {
   ];
 });
 
+doc.autoTable({
+  head,
+  body,
+  startY: 90,
+  styles: { fontSize: 9, cellPadding: 6 },
+  headStyles: { fontStyle: 'bold' },
+  didDrawPage: () => {
+    const pageHeight = doc.internal.pageSize.getHeight();
+    doc.setFontSize(10);
+    doc.text(
+      `Page Total: $${totalAmount.toFixed(2)}   |   Rows (this page): ${invoices.length}`,
+      40,
+      pageHeight - 20
+    );
+  }
+});
 
-  doc.autoTable({
-    head,
-    body,
-    startY: 90,
-    styles: { fontSize: 9, cellPadding: 6 },
-    headStyles: { fontStyle: 'bold' },
-    didDrawPage: (data) => {
-      // Footer with total on each page
-      const pageHeight = doc.internal.pageSize.getHeight();
-      doc.setFontSize(10);
-      doc.text(
-        `Total: $${totalAmount.toFixed(2)}   |   Rows: ${filteredInvoices.length}`,
-        40,
-        pageHeight - 20
-      );
-    }
-  });
-
-  doc.save(filename);
-};
-
-
-
+doc.save(filename);
+}; 
 
 
 return (
@@ -429,7 +510,6 @@ return (
   </div>
 
 
- 
 
     {/* Manual Expense Modal */}
 {isManualOpen && (
@@ -549,6 +629,23 @@ return (
             </select>
           </label>
 
+
+
+          <label className="flex flex-col text-sm">
+          <span className="mb-1 font-medium">Payment Method *</span>
+          <select
+          value={manualForm.payment_method}
+          onChange={e => setManualForm({ ...manualForm, payment_method: e.target.value })}
+          className="border rounded p-2"
+        >
+          <option value="">Select…</option>
+          <option value="SPCC">SPCC</option>
+          <option value="AP Office">AP Office</option>
+          </select>
+          </label>
+
+
+          
           <label className="md:col-span-2 flex flex-col text-sm">
             <span className="mb-1 font-medium">Purpose *</span>
             <input
@@ -723,137 +820,150 @@ return (
 
 
     {/* ACTION BAR */}
-    <div className="flex items-center gap-2 mb-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <CSVLink
-          data={filteredInvoices.map((inv) => ({
-            Source: inv.source || 'form',
-            Department: inv.department || '',
-            'Additional Department': inv.additional_department || '',
-            Vendor: inv.vendor,
-            'Invoice #': inv.invoice_number,
-            Amount: inv.invoice_total,
-            Unit: inv.dining_unit,
-            Purpose: inv.purpose || '',
-            'Expense Type': inv.expense_type || '',
-            'Account Code': inv.account_code || '',
+<div className="flex items-center gap-2 mb-2">
+  <div className="flex flex-wrap items-center gap-2">
+    <CSVLink
+      data={invoices.map((inv) => ({
+        Source: inv.source || 'form',
+        Department: inv.department || inv.dining_unit || '',
+        'Additional Department': inv.additional_department || '',
+        Vendor: inv.vendor,
+        'Invoice #': inv.invoice_number,
+        Amount: inv.invoice_total,
+        Department: inv.department || inv.dining_unit || '',
+        Purpose: inv.purpose || '',
+        'Expense Type': inv.expense_type || '',
+        'Account Code': inv.account_code || '',
+        Allocations: Array.isArray(inv.allocations)
+          ? inv.allocations.map(a => `${a.accountCode}: $${Number(a.amount || 0).toFixed(2)}`).join(' | ')
+          : (inv.account_code ? `${inv.account_code}: $${Number(inv.invoice_total || 0).toFixed(2)}` : ''),
+        Notes: inv.notes || '',
+        'Submitted By': inv.submitted_by,
+        'Payment Method': inv.payment_method,
+        Status: inv.status,
+        'Submitted On': new Date(inv.created_at).toLocaleDateString()
+      }))}
+      filename={`invoice-log-${new Date().toISOString().slice(0, 10)}.csv`}
+      className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
+    >
+      Export CSV
+    </CSVLink>
 
+    <button
+      onClick={generatePDF}
+      className="bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700"
+      type="button"
+    >
+      Export PDF
+    </button>
 
-            Allocations: Array.isArray(inv.allocations)
-  ? inv.allocations
-      .map(a => `${a.accountCode}: $${Number(a.amount || 0).toFixed(2)}`)
-      .join(' | ')
-  : (inv.account_code ? `${inv.account_code}: $${Number(inv.invoice_total || 0).toFixed(2)}` : ''),
+    <button
+      onClick={() => { setAllocations([{ accountCode: '', amount: '' }]); setIsManualOpen(true); }}
+      className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700"
+      type="button"
+    >
+      + Add Manual Expense
+    </button>
+  </div>
 
+  <div className="ml-auto whitespace-nowrap text-lg font-semibold text-green-800">
+    Page Total: ${totalAmount.toFixed(2)}
+  </div>
+</div>
 
+{/* Pagination (top) */}
+<div className="flex items-center gap-2 mb-3">
+  <button
+    className="px-3 py-1 border rounded disabled:opacity-50"
+    onClick={() => setPage(p => Math.max(1, p - 1))}
+    disabled={page === 1}
+  >
+    Prev
+  </button>
+  <span className="text-sm">
+    Page {page} of {Math.max(1, Math.ceil(totalCount / pageSize))} • {totalCount} rows
+  </span>
+  <button
+    className="px-3 py-1 border rounded disabled:opacity-50"
+    onClick={() => setPage(p => Math.min(Math.max(1, Math.ceil(totalCount / pageSize)), p + 1))}
+    disabled={page >= Math.max(1, Math.ceil(totalCount / pageSize))}
+  >
+    Next
+  </button>
+</div>
 
-            Notes: inv.notes || '',
-            'Submitted By': inv.submitted_by,
-            'Payment Method': inv.payment_method,
-            Status: inv.status,
-            'Submitted On': new Date(inv.created_at).toLocaleDateString()
-          }))}
-          filename={`invoice-log-${new Date().toISOString().slice(0, 10)}.csv`}
-          className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
-        >
-          Export CSV
-        </CSVLink>
+{/* TABLE */}
+<div className="overflow-x-auto">
+  <table className="min-w-full border text-sm">
+    <thead className="bg-gray-100 text-left">
+      <tr>
+        <th className="p-2 border">Vendor</th>
+        <th className="p-2 border">Invoice #</th>
+        <th className="p-2 border">Amount ($)</th>
+        <th className="p-2 border">Allocations</th>
+        <th className="p-2 border">Department</th>
+        <th className="p-2 border">Invoice Date</th>
+        <th className="p-2 border">Date Received</th>
+        <th className="p-2 border">Submitted By</th>
+        <th className="p-2 border">Payment Method</th>
+        <th className="p-2 border">Status</th>
+        <th className="p-2 border">Date Submitted</th>
+      </tr>
+    </thead>
+    <tbody>
+      {invoices.map((inv) => (
+        <tr key={inv.id} className="border-t hover:bg-yellow-50">
+          <td className="p-2 border">{inv.vendor}</td>
+          <td className="p-2 border">{inv.invoice_number}</td>
+          <td className="p-2 border">${parseFloat(inv.invoice_total || 0).toFixed(2)}</td>
 
-        <button
-          onClick={generatePDF}
-          className="bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700"
-          type="button"
-        >
-          Export PDF
-        </button>
+          <td className="p-2 border">
+            {Array.isArray(inv.allocations) && inv.allocations.length
+              ? inv.allocations.map((a, i) => (
+                  <span key={i} className="inline-block mr-2">
+                    {a.accountCode}: ${Number(a.amount || 0).toFixed(2)}
+                  </span>
+                ))
+              : (inv.account_code
+                  ? `${inv.account_code}: $${Number(inv.invoice_total || 0).toFixed(2)}`
+                  : '—')
+            }
+          </td>
 
-        <button
-  onClick={() => { setAllocations([{ accountCode: '', amount: '' }]); setIsManualOpen(true); }}
-  className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700"
-  type="button"
->
-  + Add Manual Expense
-</button>
-
-      </div>
-
-      <div className="ml-auto whitespace-nowrap text-lg font-semibold text-green-800">
-        Total: ${totalAmount.toFixed(2)}
-      </div>
-    </div>
-
-    {/* TABLE */}
-    <div className="overflow-x-auto">
-      <table className="min-w-full border text-sm">
-        <thead className="bg-gray-100 text-left">
-          <tr>
-            <th className="p-2 border">Vendor</th>
-            <th className="p-2 border">Invoice #</th>
-            <th className="p-2 border">Amount ($)</th>
-            <th className="p-2 border">Allocations</th>  {/* ← NEW */}
-            <th className="p-2 border">Dining Unit</th>
-            <th className="p-2 border">Invoice Date</th>
-            <th className="p-2 border">Date Received</th>
-            <th className="p-2 border">Submitted By</th>
-            <th className="p-2 border">Payment Method</th>
-            <th className="p-2 border">Status</th>
-            <th className="p-2 border">Date Submitted</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredInvoices.map((inv) => (
-            <tr key={inv.id} className="border-t hover:bg-yellow-50">
-              <td className="p-2 border">{inv.vendor}</td>
-              <td className="p-2 border">{inv.invoice_number}</td>
-              <td className="p-2 border">${parseFloat(inv.invoice_total || 0).toFixed(2)}</td>
-
-
-
-
-              <td className="p-2 border">
-  {Array.isArray(inv.allocations) && inv.allocations.length
-    ? inv.allocations.map((a, i) => (
-        <span key={i} className="inline-block mr-2">
-          {a.accountCode}: ${Number(a.amount || 0).toFixed(2)}
-        </span>
-      ))
-    : (inv.account_code
-        ? `${inv.account_code}: $${Number(inv.invoice_total || 0).toFixed(2)}`
-        : '—')
-  }
+          <td className="p-2 border">{inv.department || inv.dining_unit || ''}</td>
+          <td className="p-2 border">{inv.invoice_date}</td>
+          <td className="p-2 border">{inv.date_received}</td>
+          <td className="p-2 border">{inv.submitted_by}</td>
+          <td className="p-2 border">{inv.payment_method}</td>
+          <td className="p-2 border">
+            
+  {inv.status === 'Submitted' ? (
+    <button
+      onClick={() => handleMarkProcessed(inv.id)}
+      className="text-sm px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+    >
+      Mark as Processed
+    </button>
+  ) : inv.status === 'Processed' ? (
+    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-green-800 bg-green-100 rounded-full">
+      {/* optional check icon */}
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-7.25 7.25a1 1 0 01-1.414 0l-3-3a1 1 0 111.414-1.414l2.293 2.293 6.543-6.543a1 1 0 011.414 0z" clipRule="evenodd" />
+      </svg>
+      Processed
+    </span>
+  ) : (
+    <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded-full">
+      {inv.status || '—'}
+    </span>
+  )}
 </td>
 
-
-
-
-
-              <td className="p-2 border">{inv.dining_unit}</td>
-              <td className="p-2 border">{inv.invoice_date}</td>
-              <td className="p-2 border">{inv.date_received}</td>
-              <td className="p-2 border">{inv.submitted_by}</td>
-              <td className="p-2 border">{inv.payment_method}</td>
-              <td className="p-2 border">
-                {inv.status === 'Submitted' ? (
-                  <button
-                    onClick={() => handleMarkProcessed(inv.id)}
-                    className="text-sm px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700"
-                  >
-                    Mark as Processed
-                  </button>
-                ) : (
-                  <span>{inv.status}</span>
-                )}
-              </td>
-              <td className="p-2 border">
-                {inv.date_submitted
-                  ? new Date(inv.date_submitted).toLocaleDateString()
-                  : '—'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </div>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
+</div>
 );
 }

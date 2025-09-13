@@ -30,6 +30,9 @@ export default function RunEOMInventory() {
   const [inventoryPreview, setInventoryPreview] = useState([]);
   const [snapshotResult, setSnapshotResult] = useState(null);
 
+  // === EOM purchases state (Regattas current month) ===
+  const [purchases, setPurchases] = useState(0);
+
   const UNIT_OPTIONS = ['Regattas', 'Commons', 'Discovery', 'Palette', 'Einstein'];
 
   useEffect(() => {
@@ -50,21 +53,16 @@ export default function RunEOMInventory() {
     init();
   }, []);
 
+  useEffect(() => {
+    if (selectedUnit && user) {
+      fetchReportData();
+    }
+  }, [selectedUnit, user]);
 
   useEffect(() => {
-  if (selectedUnit && user) {
-    fetchReportData();
-  }
-}, [selectedUnit, user]);
-
-
-useEffect(() => {
-  // Clear snapshot display when switching units
-  setSnapshotResult(null);
-}, [selectedUnit]);
-
-
-
+    // Clear snapshot display when switching units
+    setSnapshotResult(null);
+  }, [selectedUnit]);
 
   useEffect(() => {
     const fetchInventory = async () => {
@@ -81,11 +79,46 @@ useEffect(() => {
       }
     };
 
-
-    
-
     fetchInventory();
   }, [selectedUnit]);
+
+  // === EOM purchases fetch (current month, Regattas only) ===
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      if (!user) return;
+
+      // This view is for Regattas only; ignore other units
+      if (selectedUnit !== 'Regattas') {
+        if (!cancelled) setPurchases(0);
+        return;
+      }
+
+      const monthStart = new Date(
+        new Date().getFullYear(),
+        new Date().getMonth(),
+        1
+      ).toISOString().slice(0, 10); // 'YYYY-MM-01'
+
+      const { data, error } = await supabase
+        .from('v_regattas_eom_purchases')
+        .select('purchases')
+        .eq('month', monthStart)
+        .maybeSingle();
+
+      if (!cancelled) {
+        if (error) {
+          console.error('EOM purchases fetch error:', error.message);
+          setPurchases(0);
+        } else {
+          setPurchases(Number(data?.purchases ?? 0));
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [selectedUnit, user]);
 
   const fetchInventoryPreview = async () => {
     const { data, error } = await supabase
@@ -100,13 +133,14 @@ useEffect(() => {
       setInventoryPreview([]);
     }
   };
-const handleSnapshotCapture = async () => {
-  const result = await captureEndingSnapshot(selectedUnit);
-  setSnapshotResult(result);        // ✅ show the snapshot confirmation
-  alert(result.message);            // ✅ optional feedback
 
-  await fetchReportData();          // 🔧 wait for data to load before UI updates
-};
+  const handleSnapshotCapture = async () => {
+    const result = await captureEndingSnapshot(selectedUnit);
+    setSnapshotResult(result);        // ✅ show the snapshot confirmation
+    alert(result.message);            // ✅ optional feedback
+
+    await fetchReportData();          // 🔧 wait for data to load before UI updates
+  };
 
 
 
